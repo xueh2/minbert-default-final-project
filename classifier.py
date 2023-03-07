@@ -57,6 +57,7 @@ class BertSentimentClassifier(torch.nn.Module):
         ### TODO
         res = self.bert(input_ids, attention_mask)
         logits = self.output_proj(self.drop_out(res['pooler_output']))
+        #logits = self.output_proj(res['pooler_output'])
         return logits
 
 
@@ -308,11 +309,11 @@ def test(args):
         
         dev_data = load_data(args.dev, 'valid')
         dev_dataset = SentimentDataset(dev_data, args)
-        dev_dataloader = DataLoader(dev_dataset, shuffle=False, batch_size=args.batch_size, collate_fn=dev_dataset.collate_fn)
+        dev_dataloader = DataLoader(dev_dataset, shuffle=False, batch_size=args.batch_size, collate_fn=dev_dataset.collate_fn, num_workers=4, prefetch_factor=4)
 
         test_data = load_data(args.test, 'test')
         test_dataset = SentimentTestDataset(test_data, args)
-        test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch_size, collate_fn=test_dataset.collate_fn)
+        test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch_size, collate_fn=test_dataset.collate_fn, num_workers=4, prefetch_factor=4)
         
         dev_acc, dev_f1, dev_pred, dev_true, dev_sents, dev_sent_ids = model_eval(dev_dataloader, model, device)
         print('DONE DEV')
