@@ -256,8 +256,11 @@ def train(args):
     config = SimpleNamespace(**config)
 
     model = BertSentimentClassifier(config)
+    if args.dp:
+        model = torch.nn.DataParallel(model)
+        
     model = model.to(device)
-
+    
     lr = args.lr
     optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
@@ -292,6 +295,8 @@ def train(args):
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
+            if config.dp:
+                model = model.cpu().module
             save_model(model, optimizer, args, config, args.filepath)
 
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
@@ -337,6 +342,7 @@ def get_args():
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
     parser.add_argument("--use_gpu", action='store_true')
+    parser.add_argument("--dp", help='if set, perform data parallel training', action='store_true')
     parser.add_argument("--dev_out", type=str, default="cfimdb-dev-output.txt")
     parser.add_argument("--test_out", type=str, default="cfimdb-test-output.txt")
                                     
@@ -359,6 +365,7 @@ if __name__ == "__main__":
         filepath='sst-classifier.pt',
         lr=args.lr,
         use_gpu=args.use_gpu,
+        dp=args.dp,
         epochs=args.epochs,
         batch_size=args.batch_size,
         hidden_dropout_prob=args.hidden_dropout_prob,
@@ -380,6 +387,7 @@ if __name__ == "__main__":
         filepath='cfimdb-classifier.pt',
         lr=args.lr,
         use_gpu=args.use_gpu,
+        dp=args.dp,
         epochs=args.epochs,
         batch_size=8,
         hidden_dropout_prob=args.hidden_dropout_prob,
