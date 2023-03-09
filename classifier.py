@@ -258,6 +258,7 @@ def train(args):
     model = BertSentimentClassifier(config)
     if args.dp:
         model = torch.nn.DataParallel(model)
+        print("model on data parallel")
         
     model = model.to(device)
     
@@ -295,9 +296,11 @@ def train(args):
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
-            if config.dp:
-                model = model.cpu().module
-            save_model(model, optimizer, args, config, args.filepath)
+            if args.dp:
+                model_saved = model.module
+            else:
+                model_saved = model
+            save_model(model_saved, optimizer, args, config, args.filepath)
 
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
@@ -381,7 +384,7 @@ if __name__ == "__main__":
 
     print('Evaluating on SST...')
     test(config)
-
+    
     print('Training Sentiment Classifier on cfimdb...')
     config = SimpleNamespace(
         filepath='cfimdb-classifier.pt',
@@ -389,7 +392,7 @@ if __name__ == "__main__":
         use_gpu=args.use_gpu,
         dp=args.dp,
         epochs=args.epochs,
-        batch_size=8,
+        batch_size=args.batch_size,
         hidden_dropout_prob=args.hidden_dropout_prob,
         train='data/ids-cfimdb-train.csv',
         dev='data/ids-cfimdb-dev.csv',
