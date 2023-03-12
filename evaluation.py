@@ -21,7 +21,7 @@ from sklearn.metrics import classification_report, f1_score, recall_score, accur
 from tqdm import tqdm
 import numpy as np
 
-from datasets import load_multitask_data, load_multitask_test_data, \
+from datasets import load_multitask_data, load_multitask_test_data, convert_logits_to_label_STS, \
     SentenceClassificationDataset, SentenceClassificationTestDataset, \
     SentencePairDataset, SentencePairTestDataset
 
@@ -65,101 +65,116 @@ def model_eval_multitask(sentiment_dataloader,
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
+        
+        # ------------------------------------------------------------------------------------------
         para_y_true = []
         para_y_pred = []
         para_sent_ids = []
+        paraphrase_accuracy = 0
+        
+        if args.without_para is False:
+            
+            # Evaluate paraphrase detection.
+            for step, batch in enumerate(tqdm(paraphrase_dataloader, disable=TQDM_DISABLE, bar_format='eval - para, {percentage:3.0f}%|{bar:40}{r_bar}')):
+                (b_ids1, b_mask1,
+                b_ids2, b_mask2,
+                b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                            batch['token_ids_2'], batch['attention_mask_2'],
+                            batch['labels'], batch['sent_ids'])
 
-        # Evaluate paraphrase detection.
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval - para', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
-            (b_ids1, b_mask1,
-             b_ids2, b_mask2,
-             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
-                          batch['token_ids_2'], batch['attention_mask_2'],
-                          batch['labels'], batch['sent_ids'])
+                b_ids1 = b_ids1.to(device, non_blocking=True)
+                b_mask1 = b_mask1.to(device, non_blocking=True)
+                b_ids2 = b_ids2.to(device, non_blocking=True)
+                b_mask2 = b_mask2.to(device, non_blocking=True)
 
-            b_ids1 = b_ids1.to(device, non_blocking=True)
-            b_mask1 = b_mask1.to(device, non_blocking=True)
-            b_ids2 = b_ids2.to(device, non_blocking=True)
-            b_mask2 = b_mask2.to(device, non_blocking=True)
-
-            if(args.use_amp):
-                with torch.cuda.amp.autocast():
+                if(args.use_amp):
+                    with torch.cuda.amp.autocast():
+                        logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
+                else:
                     logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
-            else:
-                logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
-                            
-            y_hat = logits.sigmoid().round().flatten().cpu().numpy()
-            b_labels = b_labels.flatten().cpu().numpy()
+                                
+                y_hat = logits.sigmoid().round().flatten().cpu().numpy()
+                b_labels = b_labels.flatten().cpu().numpy()
 
-            para_y_pred.extend(y_hat)
-            para_y_true.extend(b_labels)
-            para_sent_ids.extend(b_sent_ids)
+                para_y_pred.extend(y_hat)
+                para_y_true.extend(b_labels)
+                para_sent_ids.extend(b_sent_ids)
 
-        paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
-
+            paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
+        # ------------------------------------------------------------------------------------------
+                
         sts_y_true = []
         sts_y_pred = []
         sts_sent_ids = []
+        sts_corr = 0
 
+        if args.without_sts is False:
+            # Evaluate semantic textual similarity.
+            for step, batch in enumerate(tqdm(sts_dataloader, disable=TQDM_DISABLE, bar_format='eval - sts, {percentage:3.0f}%|{bar:40}{r_bar}')):
+                (b_ids1, b_mask1,
+                b_ids2, b_mask2,
+                b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                            batch['token_ids_2'], batch['attention_mask_2'],
+                            batch['labels'], batch['sent_ids'])
 
-        # Evaluate semantic textual similarity.
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval - sts', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
-            (b_ids1, b_mask1,
-             b_ids2, b_mask2,
-             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
-                          batch['token_ids_2'], batch['attention_mask_2'],
-                          batch['labels'], batch['sent_ids'])
+                b_ids1 = b_ids1.to(device, non_blocking=True)
+                b_mask1 = b_mask1.to(device, non_blocking=True)
+                b_ids2 = b_ids2.to(device, non_blocking=True)
+                b_mask2 = b_mask2.to(device, non_blocking=True)
 
-            b_ids1 = b_ids1.to(device, non_blocking=True)
-            b_mask1 = b_mask1.to(device, non_blocking=True)
-            b_ids2 = b_ids2.to(device, non_blocking=True)
-            b_mask2 = b_mask2.to(device, non_blocking=True)
+                #logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
 
-            #logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
-            
-            if(args.use_amp):
-                with torch.cuda.amp.autocast():
+                if(args.use_amp):
+                    with torch.cuda.amp.autocast():
+                        logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+                else:
                     logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
-            else:
-                logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+                                    
+                if args.sts_train_method == 'regression':                       
+                    y_hat = logits.flatten().cpu().numpy()
+                else:
+                    # for classification setting
+                    y_hat = convert_logits_to_label_STS(logits)
+                    y_hat = y_hat.flatten().cpu().numpy()
                 
-            y_hat = logits.flatten().cpu().numpy()
-            b_labels = b_labels.flatten().cpu().numpy()
+                b_labels = b_labels.flatten().cpu().numpy()
 
-            sts_y_pred.extend(y_hat)
-            sts_y_true.extend(b_labels)
-            sts_sent_ids.extend(b_sent_ids)
-        pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
-        sts_corr = pearson_mat[1][0]
-
+                sts_y_pred.extend(y_hat)
+                sts_y_true.extend(b_labels)
+                sts_sent_ids.extend(b_sent_ids)
+            pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
+            sts_corr = pearson_mat[1][0]
+        # ------------------------------------------------------------------------------------------
 
         sst_y_true = []
         sst_y_pred = []
         sst_sent_ids = []
+        sentiment_accuracy = 0
+        
+        if args.without_sst is False:
+            # Evaluate sentiment classification.
+            for step, batch in enumerate(tqdm(sentiment_dataloader, disable=TQDM_DISABLE, bar_format='eval - sst, {percentage:3.0f}%|{bar:40}{r_bar}')):
+                b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
 
-        # Evaluate sentiment classification.
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval - sst', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
-            b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
+                b_ids = b_ids.to(device, non_blocking=True)
+                b_mask = b_mask.to(device, non_blocking=True)
 
-            b_ids = b_ids.to(device, non_blocking=True)
-            b_mask = b_mask.to(device, non_blocking=True)
-
-            #logits = model.predict_sentiment(b_ids, b_mask)
-            
-            if(args.use_amp):
-                with torch.cuda.amp.autocast():
-                    logits = model(b_ids, b_mask, 'sst')
-            else:
-                logits = model(b_ids, b_mask, 'sst')
+                #logits = model.predict_sentiment(b_ids, b_mask)
                 
-            y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
-            b_labels = b_labels.flatten().cpu().numpy()
+                if(args.use_amp):
+                    with torch.cuda.amp.autocast():
+                        logits = model(b_ids, b_mask, 'sst')
+                else:
+                    logits = model(b_ids, b_mask, 'sst')
+                    
+                y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
+                b_labels = b_labels.flatten().cpu().numpy()
 
-            sst_y_pred.extend(y_hat)
-            sst_y_true.extend(b_labels)
-            sst_sent_ids.extend(b_sent_ids)
+                sst_y_pred.extend(y_hat)
+                sst_y_true.extend(b_labels)
+                sst_sent_ids.extend(b_sent_ids)
 
-        sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
+            sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
 
         # print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
         # print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
@@ -178,10 +193,11 @@ def model_eval_test_multitask(sentiment_dataloader,
 
     with torch.no_grad():
 
+        # ------------------------------------------------------------------------------
         para_y_pred = []
         para_sent_ids = []
         # Evaluate paraphrase detection.
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval - para', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, disable=TQDM_DISABLE, bar_format='eval - para, {percentage:3.0f}%|{bar:40}{r_bar}')):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -204,12 +220,12 @@ def model_eval_test_multitask(sentiment_dataloader,
             para_sent_ids.extend(b_sent_ids)
 
 
+        # ------------------------------------------------------------------------------
         sts_y_pred = []
         sts_sent_ids = []
 
-
         # Evaluate semantic textual similarity.
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval - sts', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
+        for step, batch in enumerate(tqdm(sts_dataloader, disable=TQDM_DISABLE, bar_format='eval - sts, {percentage:3.0f}%|{bar:40}{r_bar}')):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -226,17 +242,24 @@ def model_eval_test_multitask(sentiment_dataloader,
                     logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
             else:
                 logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
-            y_hat = logits.flatten().cpu().numpy()
-
+                
+            if args.sts_train_method == 'regression':                       
+                y_hat = logits.flatten().cpu().numpy()
+            else:
+                # for classification setting
+                y_hat = convert_logits_to_label_STS(logits)
+                y_hat = y_hat.flatten().cpu().numpy()
+                    
             sts_y_pred.extend(y_hat)
             sts_sent_ids.extend(b_sent_ids)
 
 
+        # ------------------------------------------------------------------------------
         sst_y_pred = []
         sst_sent_ids = []
 
         # Evaluate sentiment classification.
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval - sst', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
+        for step, batch in enumerate(tqdm(sentiment_dataloader, disable=TQDM_DISABLE, bar_format='eval - sst, {percentage:3.0f}%|{bar:40}{r_bar}')):
             b_ids, b_mask, b_sent_ids = batch['token_ids'], batch['attention_mask'],  batch['sent_ids']
 
             b_ids = b_ids.to(device, non_blocking=True)
@@ -256,6 +279,7 @@ def model_eval_test_multitask(sentiment_dataloader,
                 sst_y_pred, sst_sent_ids,
                 sts_y_pred, sts_sent_ids)
 
+# ------------------------------------------------------------------------------
 
 def test_model_multitask(args, model, device):
         sst_test_data, num_labels,para_test_data, sts_test_data = \

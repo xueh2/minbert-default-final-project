@@ -9,20 +9,25 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
-from datasets import SentenceClassificationDataset, SentencePairDataset, \
+from datasets import SentenceClassificationDataset, SentencePairDataset, SentencePairSTSDataset, \
     load_multitask_data, load_multitask_test_data
 
 from evaluation import model_eval_sst, model_eval_multitask, test_model_multitask
 
-from utils import AverageMeter
+from utils import AverageMeter, count_parameters
+from multitask_classifier_model import MultitaskBERT
 
 TQDM_DISABLE=False
+BERT_HIDDEN_SIZE = 768
+N_SENTIMENT_CLASSES = 5
 
+# -------------------------------------------------------
 # fix the random seed
 def seed_everything(seed=11711):
     random.seed(seed)
@@ -33,131 +38,7 @@ def seed_everything(seed=11711):
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-
-BERT_HIDDEN_SIZE = 768
-N_SENTIMENT_CLASSES = 5
-
-
-class MultitaskBERT(nn.Module):
-    '''
-    This module should use BERT for 3 tasks:
-
-    - Sentiment classification (predict_sentiment)
-    - Paraphrase detection (predict_paraphrase)
-    - Semantic Textual Similarity (predict_similarity)
-    '''
-    def __init__(self, config):
-        super(MultitaskBERT, self).__init__()
-        # You will want to add layers here to perform the downstream tasks.
-        # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
-        for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-                
-        self.bert2 = BertModel.from_pretrained('bert-base-uncased')
-        for param in self.bert2.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-                
-        ### TODO
-        self.pooler_dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pooler_af = nn.Tanh()
-    
-        # sentiment
-        self.sentiment_drop_out = torch.nn.Dropout(0.1)
-        self.sentiment_output_proj = torch.nn.Linear(config.hidden_size, 5)
-
-        # paraphrase
-        self.paraphrase_drop_out = torch.nn.Dropout(0.1)
-        self.paraphrase_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.paraphrase_nl = F.gelu
-        self.paraphrase_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
-                
-        # similarity
-        self.similarity_drop_out = torch.nn.Dropout(0.1)
-        self.similarity_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.similarity_nl = F.gelu
-        self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
-        
-    def call_backbone(self, input_ids, attention_mask):
-        res = self.bert(input_ids, attention_mask)
-        sequence_output = self.bert2.encode(res['last_hidden_state'], attention_mask=attention_mask)
-        
-        first_tk = sequence_output[:, 0]
-        
-        first_tk = self.pooler_dense(first_tk)
-        #first_tk = self.pooler_af(first_tk)
-    
-        return first_tk, sequence_output
-        
-    def forward(self, input_ids, attention_mask, task_str):
-        'Takes a batch of sentences and produces embeddings for them.'
-        # The final BERT embedding is the hidden state of [CLS] token (the first token)
-        # Here, you can start by just returning the embeddings straight from BERT.
-        # When thinking of improvements, you can later try modifying this
-        # (e.g., by adding other layers).
-        ### TODO
-        if task_str == 'sst':
-            return self.predict_sentiment(input_ids, attention_mask)
-        
-        if task_str == 'sts':
-            return self.predict_similarity(input_ids[0], attention_mask[0], input_ids[1], attention_mask[1])
-        
-        if task_str == 'para':
-            return self.predict_paraphrase(input_ids[0], attention_mask[0], input_ids[1], attention_mask[1])
-
-        raise "incorrect task str ..."
-
-    def predict_sentiment(self, input_ids, attention_mask):
-        '''Given a batch of sentences, outputs logits for classifying sentiment.
-        There are 5 sentiment classes:
-        (0 - negative, 1- somewhat negative, 2- neutral, 3- somewhat positive, 4- positive)
-        Thus, your output should contain 5 logits for each sentence.
-        '''
-        ### TODO
-        pooler_output, last_hidden_state = self.call_backbone(input_ids, attention_mask)
-        logits = self.sentiment_output_proj(self.sentiment_drop_out(pooler_output))
-        return logits
-
-    def predict_paraphrase(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
-        '''Given a batch of pairs of sentences, outputs a single logit for predicting whether they are paraphrases.
-        Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
-        during evaluation, and handled as a logit by the appropriate loss function.
-        '''
-        ### TODO
-        pooler_output_1, _ = self.call_backbone(input_ids_1, attention_mask_1)       
-        pooler_output_2, _ = self.call_backbone(input_ids_2, attention_mask_2)
-        
-        x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
-        x = self.paraphrase_output_proj1(self.paraphrase_drop_out(x))
-        logits = self.paraphrase_output_proj2(self.paraphrase_nl(x))
-        return logits
-
-    def predict_similarity(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
-        '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
-        Note that your output should be unnormalized (a logit).
-        '''
-        ### TODO
-        pooler_output_1, _ = self.call_backbone(input_ids_1, attention_mask_1)       
-        pooler_output_2, _ = self.call_backbone(input_ids_2, attention_mask_2)
-        
-        x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
-        x = self.similarity_output_proj1(self.similarity_drop_out(x))
-        logits = self.similarity_output_proj2(self.similarity_nl(x))
-        return logits
-
-
-
-
+# -------------------------------------------------------
 def save_model(model, optimizer, args, config, filepath):
     save_info = {
         'model': model.state_dict(),
@@ -172,7 +53,7 @@ def save_model(model, optimizer, args, config, filepath):
     torch.save(save_info, filepath)
     print(f"--> Save the model to {Fore.RED}{filepath}{Style.RESET_ALL}")
 
-
+# -------------------------------------------------------
 def corr_coef(y, y_hat):
     vy = y - torch.mean(y)
     vy_hat = y_hat - torch.mean(y_hat)
@@ -181,11 +62,16 @@ def corr_coef(y, y_hat):
     
     return cost
 
+# -------------------------------------------------------
 ## Currently only trains on sst dataset
 def train_multitask(args):
     
     # check    
     assert not args.without_para or not args.without_sts or not args.without_sst
+    
+    # -------------------------------------------------------
+    
+    writer = SummaryWriter(log_dir="multi-task")
     
     # -------------------------------------------------------
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
@@ -229,8 +115,8 @@ def train_multitask(args):
     
     # -------------------------------------------------------
     # sts datasets
-    sts_train_data = SentencePairDataset(sts_train_dataset, args, isRegression=True)
-    sts_dev_data = SentencePairDataset(sts_dev_dataset, args, isRegression=True)
+    sts_train_data = SentencePairSTSDataset(sts_train_dataset, args, isRegression=True)
+    sts_dev_data = SentencePairSTSDataset(sts_dev_dataset, args, isRegression=True)
 
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sts_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
     sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sts_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
@@ -244,11 +130,14 @@ def train_multitask(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option}
+              'option': args.option,
+              'sts_train_method': args.sts_train_method}
 
     config = SimpleNamespace(**config)
 
     model = MultitaskBERT(config)
+    num_paras = count_parameters(model)
+    print(f"{Fore.RED}--> Number of model parameters {num_paras} - {num_paras/1024/1024:.2f} MB.{Style.RESET_ALL}")
     
     with_data_parallel = False
     if args.dp and torch.cuda.device_count()>1:
@@ -281,41 +170,13 @@ def train_multitask(args):
         optimizer = torch.optim.NAdam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
                                 weight_decay=args.weight_decay, momentum_decay=0.004)
         
-    # -------------------------------------------------------------
-        
-    scheduler = None
-
-    if (args.scheduler == "ReduceLROnPlateau"):
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',
-                                                               patience=2,
-                                                               min_lr=1e-6,
-                                                               cooldown=1,
-                                                               factor=0.5,
-                                                               verbose=True)
-        scheduler_on_batch = False
-        
-    if (args.scheduler == "StepLR"):
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 10, gamma=0.8, last_epoch=-1, verbose=True)
-        scheduler_on_batch = False
-
-    if (args.scheduler == "OneCycleLR"):
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=config.lr,
-                                                        total_steps=None, epochs=config.num_epochs,
-                                                        steps_per_epoch=len(para_train_dataloader), pct_start=0.3,
-                                                        anneal_strategy='cos', cycle_momentum=True,
-                                                        base_momentum=0.85, max_momentum=0.95,
-                                                        div_factor=25,
-                                                        final_div_factor=10000,
-                                                        three_phase=False,
-                                                        last_epoch=-1)
-
-        scheduler_on_batch = True
-    
     # --------------------------------------------------------
     best_dev_acc = 0
 
     bce_logit_loss = nn.BCEWithLogitsLoss(reduction='sum')
     mse_loss = nn.MSELoss(reduction='sum')
+    l1_loss = nn.L1Loss(reduction='sum')
+    kl_loss = nn.KLDivLoss(reduction="sum")
 
     epoch_para = 0
     epoch_sst = 0
@@ -348,6 +209,36 @@ def train_multitask(args):
 
     print(f"number of steps per epoch is {num_step}")
     
+    # -------------------------------------------------------------
+        
+    scheduler = None
+
+    if (args.scheduler == "ReduceLROnPlateau"):
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',
+                                                               patience=2,
+                                                               min_lr=1e-6,
+                                                               cooldown=1,
+                                                               factor=0.5,
+                                                               verbose=True)
+        scheduler_on_batch = False
+        
+    if (args.scheduler == "StepLR"):
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.StepLR_step_size, gamma=0.8, last_epoch=-1, verbose=True)
+        scheduler_on_batch = False
+
+    if (args.scheduler == "OneCycleLR"):
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=config.lr,
+                                                        total_steps=None, epochs=config.num_epochs,
+                                                        steps_per_epoch=num_step, pct_start=0.3,
+                                                        anneal_strategy='cos', cycle_momentum=True,
+                                                        base_momentum=0.85, max_momentum=0.95,
+                                                        div_factor=25,
+                                                        final_div_factor=10000,
+                                                        three_phase=False,
+                                                        last_epoch=-1)
+
+        scheduler_on_batch = True
+            
     # --------------------------------------------------------    
     
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
@@ -378,10 +269,13 @@ def train_multitask(args):
 
         loop = tqdm(range(num_step), desc=f'training loop', bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
                     
+        # -----------------------------------------------------------------------------------------------------------------------------------------
         # loop over the largest batches
         for ind_step in loop:
             
+            # ---------------------------------------------------------------------
             # para
+            # ---------------------------------------------------------------------
             if args.without_para is False:
                 try:
                     batch_para = next(iter_para)
@@ -408,7 +302,9 @@ def train_multitask(args):
             else:
                 para_loss = 0
                 
+            # ---------------------------------------------------------------------
             # sst      
+            # ---------------------------------------------------------------------
             if args.without_sst is False:
                 try:
                     batch_sst = next(iter_sst)
@@ -437,7 +333,9 @@ def train_multitask(args):
             else:
                 sst_loss = 0
     
+            # ---------------------------------------------------------------------
             # sts
+            # ---------------------------------------------------------------------
             if args.without_sts is False:
                 try:
                     batch_sts = next(iter_sts)
@@ -451,24 +349,36 @@ def train_multitask(args):
                 sts_token_ids_2 = batch_sts['token_ids_2'].to(device, non_blocking=True)
                 sts_attention_mask_2 = batch_sts['attention_mask_2'].to(device, non_blocking=True)
                 sts_labels = batch_sts['labels'].float().to(device, non_blocking=True)
+                sts_probs = batch_sts['probs'].float().to(device, non_blocking=True)
                 
-                if(args.use_amp):
-                    with torch.cuda.amp.autocast():
-                        sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
-                        #sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
-                        sts_loss = 1.0 - corr_coef(sts_logits, sts_labels[:, None])
+                if args.sts_train_method == 'regression':
+                    if(args.use_amp):
+                        with torch.cuda.amp.autocast():
+                            sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
+                            sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / args.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                    else:
+                        sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
+                        sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / args.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
                 else:
-                    sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
-                    #sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
-                    sts_loss = 1.0 - corr_coef(sts_logits, sts_labels[:, None])
+                    if(args.use_amp):
+                        with torch.cuda.amp.autocast():
+                            sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
+                            sts_y_hat_prob = F.log_softmax(sts_logits, dim=1)
+                            sts_loss = kl_loss(sts_y_hat_prob, sts_probs) / args.batch_size
+                    else:
+                        sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
+                        sts_y_hat_prob = F.log_softmax(sts_logits, dim=1)
+                        sts_loss = kl_loss(sts_y_hat_prob, sts_probs) / args.batch_size
                     
                 sts_train_loss.update(sts_loss.item(), args.batch_size)        
             else:
                 sts_loss = 0
             
+            # ---------------------------------------------------------------------
             # combined loss
             loss = para_loss + sts_loss + sst_loss
-            
+                        
+            # ---------------------------------------------------------------------
             # backprop
             optimizer.zero_grad(set_to_none=True)
             
@@ -479,7 +389,7 @@ def train_multitask(args):
             else:
                 loss.backward()
                 optimizer.step()
-                                     
+            # ---------------------------------------------------------------------
             # scheduler              
             if (scheduler is not None) and scheduler_on_batch:
                 scheduler.step()           
@@ -488,12 +398,26 @@ def train_multitask(args):
                 curr_lr = scheduler.optimizer.param_groups[0]['lr']
                 if ind_step == 0:
                     curr_lr = args.lr
-                
+            # ---------------------------------------------------------------------
             # set the loop
             loop.set_postfix_str(f"{Fore.GREEN} lr {curr_lr:g}, {Fore.YELLOW} epoch {epoch} - step {ind_step}, {para_print_start} para {epoch_para} : {para_train_loss.avg:.4f}, {sst_print_start} sst {epoch_sst} : {sst_train_loss.avg:.4f}, {sts_print_start} sts {epoch_sts} : {sts_train_loss.avg:.4f}")
-        # --------------------------------------------------------------------
+            
+            # ---------------------------------------------------------------------
+            # add summary
+            if args.without_para is False:
+                writer.add_scalar("para_loss", para_loss.item(), ind_step + num_step * epoch)
+                writer.add_scalar("para_train_loss", para_train_loss.avg, ind_step + num_step * epoch)
+            if args.without_sts is False:
+                writer.add_scalar("sts_loss", sts_loss.item(), ind_step + num_step * epoch)
+                writer.add_scalar("sts_train_loss", sts_train_loss.avg, ind_step + num_step * epoch)
+            if args.without_sst is False:
+                writer.add_scalar("sst_loss", sst_loss.item(), ind_step + num_step * epoch)
+                writer.add_scalar("sst_train_loss", sst_train_loss.avg, ind_step + num_step * epoch)
+                
+        # ------------------------------------------------------------------------------------------------------------
         
         epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
+        writer.add_scalar("epoch_loss", epoch_loss, epoch)
                
         # --------------------------------------------------------------------
         if (scheduler is not None) and (scheduler_on_batch == False):
@@ -502,6 +426,8 @@ def train_multitask(args):
             else:
                 scheduler.step()
             print(f"{Fore.YELLOW}for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {scheduler.optimizer.param_groups[0]['lr']}{Style.RESET_ALL}")
+            
+            writer.add_scalar("epoch_lr", scheduler.optimizer.param_groups[0]['lr'], epoch)
             
         # --------------------------------------------------------------------
         # validation
@@ -528,16 +454,28 @@ def train_multitask(args):
                 
             save_model(model_saved, optimizer, args, config, args.filepath)
 
-        print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
+        writer.add_scalar("dev_acc", dev_acc, epoch)        
+        
+        if args.without_sst is False:
+            print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
+            writer.add_scalar("sst_dev_accuracy", sst_dev_accuracy, epoch)
+                
+        if args.without_para is False:
+            print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
+            writer.add_scalar("para_dev_accuracy", para_dev_accuracy, epoch)
+            
+        if args.without_sts is False:
+            print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
+            writer.add_scalar("sts_dev_corr", sts_dev_corr, epoch)    
+                
         print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
         
+        # clean up
         para_train_loss.reset()
         sst_train_loss.reset()
         sts_train_loss.reset()
 
-# ------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------------------------------
 
 def test_model(args):
     with torch.no_grad():
@@ -605,7 +543,7 @@ def get_args():
         default="AdamW",
         help='Adam, Adamw, SGD, NAdam'
     )
-        
+                
     parser.add_argument(
         "--scheduler",
         type=str,
@@ -613,11 +551,20 @@ def get_args():
         help='ReduceLROnPlateau, StepLR, or OneCycleLR'
     )
     
+    parser.add_argument('--StepLR_step_size', type=int, default=4, help='step size to reduce lr for SGD optimizer')
+    
     parser.add_argument(
         "--activation",
         type=str,
         default="LeakyReLU",
         help='ReLU, LeakyReLU, or ELU'
+    )
+    
+    parser.add_argument(
+        "--sts_train_method",
+        type=str,
+        default="classification",
+        help='classification or regression; whether to train sts as a classification or regression problem'
     )
     
     parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay')
@@ -634,6 +581,6 @@ if __name__ == "__main__":
     
     args = get_args()
     args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    seed_everything(args.seed)  # fix the seed for reproducibility
+    #seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask(args)
     test_model(args)

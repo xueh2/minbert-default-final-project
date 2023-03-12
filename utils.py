@@ -362,3 +362,7 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+        
+        
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

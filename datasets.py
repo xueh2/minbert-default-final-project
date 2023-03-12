@@ -12,6 +12,7 @@ import csv
 
 import torch
 from torch.utils.data import Dataset
+import torch.nn.functional as F
 from tokenizer import BertTokenizer
 
 
@@ -206,6 +207,83 @@ class SentencePairTestDataset(Dataset):
 
         return batched_data
 
+def compute_label(p_large, loc_large, p_small, loc_small):
+    p = p_large / (p_large + p_small)
+    
+    if loc_large > loc_small:
+        return loc_large - (1.0 - p)
+    else:
+        return loc_large + (1.0 - p)
+    
+def convert_logits_to_label_STS(logits):
+    """Convert logits to label (float)
+
+    Args:
+        logits ([B, 6]): logits for STS
+
+    Returns:
+        labels: [B, 1], float values
+    """
+
+    probs = F.softmax(logits, dim=1)    
+    max_prob_ind = torch.argmax(probs, dim=1)
+        
+    B = logits.shape[0]
+    labels = torch.zeros(B, dtype=torch.float32, device=logits.device)
+    
+    for b in range(B):
+        
+        if max_prob_ind[b] == 0:
+            p_large = probs[b, 0]
+            p_small = probs[b, 1]
+            loc = compute_label(p_large, 0, p_small, 1)
+        elif max_prob_ind[b] == 5:
+            p_large = probs[b, 5]
+            p_small = probs[b, 4]
+            loc = compute_label(p_large, 5, p_small, 4)
+        else:
+            p_large = probs[b, max_prob_ind[b]]
+            p_small1 = probs[b, max_prob_ind[b]-1]
+            loc1 = compute_label(p_large, max_prob_ind[b], p_small1, max_prob_ind[b]-1)
+            p_small2 = probs[b, max_prob_ind[b]+1]
+            loc2 = compute_label(p_large, max_prob_ind[b], p_small2, max_prob_ind[b]+1)
+            
+            loc = loc1 if p_small1>p_small2 else loc2
+            
+        labels[b] = loc    
+
+    return labels
+
+
+class SentencePairSTSDataset(SentencePairDataset):
+    """Load STS data as probability
+
+    Args:
+        SentencePairDataset (Dataset): convert labels to probabilities
+    """
+    def __init__(self, dataset, args, isRegression =False):
+        super().__init__(dataset, args, isRegression)
+    
+    def collate_fn(self, all_data):
+        batched_data = super().collate_fn(all_data)
+        
+        labels = batched_data['labels']
+        
+        B = labels.shape[0]
+        # convert labels to probs
+        probs = torch.zeros([B, 6], dtype=torch.float32)
+        
+        for b in range(B):
+            v = labels[b]
+            v1 = int(torch.floor(v))
+            probs[b, v1] = 1.0 - (v - v1)
+            if v1 < 5:
+                probs[b, v1+1] = 1.0 - probs[b, v1]
+
+        batched_data['probs'] = probs
+        
+        return batched_data
+# ------------------------------------------------------------------
 
 def load_multitask_test_data():
     paraphrase_filename = f'data/quora-test.csv'

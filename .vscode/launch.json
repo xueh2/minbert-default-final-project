@@ -38,12 +38,12 @@
                 "--dp", 
                 "--use_gpu", 
                 "--without_para", "--without_sst", 
-                "--lr", "1e-3", 
+                "--lr", "1e-5", 
                 "--batch_size", "16", 
                 "--epochs", "20",
                 "--optimizer", "AdamW",
                 "--scheduler", "ReduceLROnPlateau", 
-                "--use_amp"
+                "--sts_train_method", "classification"
             ]
         }
     ]
