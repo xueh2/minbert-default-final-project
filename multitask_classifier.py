@@ -56,7 +56,18 @@ class MultitaskBERT(nn.Module):
                 param.requires_grad = False
             elif config.option == 'finetune':
                 param.requires_grad = True
+                
+        self.bert2 = BertModel.from_pretrained('bert-base-uncased')
+        for param in self.bert2.parameters():
+            if config.option == 'pretrain':
+                param.requires_grad = False
+            elif config.option == 'finetune':
+                param.requires_grad = True
+                
         ### TODO
+        self.pooler_dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.pooler_af = nn.Tanh()
+    
         # sentiment
         self.sentiment_drop_out = torch.nn.Dropout(0.1)
         self.sentiment_output_proj = torch.nn.Linear(config.hidden_size, 5)
@@ -75,7 +86,14 @@ class MultitaskBERT(nn.Module):
         
     def call_backbone(self, input_ids, attention_mask):
         res = self.bert(input_ids, attention_mask)
-        return res['pooler_output'], res['last_hidden_state']
+        sequence_output = self.bert2.encode(res['last_hidden_state'], attention_mask=attention_mask)
+        
+        first_tk = sequence_output[:, 0]
+        
+        first_tk = self.pooler_dense(first_tk)
+        #first_tk = self.pooler_af(first_tk)
+    
+        return first_tk, sequence_output
         
     def forward(self, input_ids, attention_mask, task_str):
         'Takes a batch of sentences and produces embeddings for them.'
@@ -154,6 +172,14 @@ def save_model(model, optimizer, args, config, filepath):
     torch.save(save_info, filepath)
     print(f"--> Save the model to {Fore.RED}{filepath}{Style.RESET_ALL}")
 
+
+def corr_coef(y, y_hat):
+    vy = y - torch.mean(y)
+    vy_hat = y_hat - torch.mean(y_hat)
+
+    cost = torch.sum(vy * vy_hat) / (torch.sqrt(torch.sum(vy ** 2)) * torch.sqrt(torch.sum(vy_hat ** 2)))
+    
+    return cost
 
 ## Currently only trains on sst dataset
 def train_multitask(args):
@@ -429,10 +455,12 @@ def train_multitask(args):
                 if(args.use_amp):
                     with torch.cuda.amp.autocast():
                         sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
-                        sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                        #sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                        sts_loss = 1.0 - corr_coef(sts_logits, sts_labels[:, None])
                 else:
                     sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
-                    sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                    #sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                    sts_loss = 1.0 - corr_coef(sts_logits, sts_labels[:, None])
                     
                 sts_train_loss.update(sts_loss.item(), args.batch_size)        
             else:
@@ -466,11 +494,7 @@ def train_multitask(args):
         # --------------------------------------------------------------------
         
         epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
-        
-        para_train_loss.reset()
-        sst_train_loss.reset()
-        sts_train_loss.reset()
-        
+               
         # --------------------------------------------------------------------
         if (scheduler is not None) and (scheduler_on_batch == False):
             if(isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)):
@@ -508,6 +532,12 @@ def train_multitask(args):
         print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
+        
+        para_train_loss.reset()
+        sst_train_loss.reset()
+        sts_train_loss.reset()
+
+# ------------------------------------------------------------------------
 
 def test_model(args):
     with torch.no_grad():
@@ -522,6 +552,7 @@ def test_model(args):
 
         test_model_multitask(args, model, device)
 
+# ------------------------------------------------------------------------
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -594,6 +625,8 @@ def get_args():
     # -------------------------------
     args = parser.parse_args()
     return args
+
+# ------------------------------------------------------------------------
 
 if __name__ == "__main__":
     
