@@ -65,7 +65,9 @@ class MultitaskBERT(nn.Module):
                 
         # similarity
         self.similarity_drop_out = torch.nn.Dropout(0.1)
-        self.similarity_output_proj = torch.nn.Linear(2*config.hidden_size, 1)
+        self.similarity_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
+        self.similarity_nl = F.gelu
+        self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
         
     def call_backbone(self, input_ids, attention_mask):
         res = self.bert(input_ids, attention_mask)
@@ -126,7 +128,9 @@ class MultitaskBERT(nn.Module):
         pooler_output_1, _ = self.call_backbone(input_ids_1, attention_mask_1)       
         pooler_output_2, _ = self.call_backbone(input_ids_2, attention_mask_2)
         
-        logits = self.similarity_output_proj(self.similarity_drop_out(torch.concat((pooler_output_1, pooler_output_2), dim=1)))
+        x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
+        x = self.similarity_output_proj1(self.similarity_drop_out(x))
+        logits = self.similarity_output_proj2(self.similarity_nl(x))
         return logits
 
 
@@ -211,8 +215,64 @@ def train_multitask(args):
         
     model = model.to(device)
 
+    # --------------------------------------------------------
     lr = args.lr
-    optimizer = AdamW(model.parameters(), lr=lr)
+    #optimizer = AdamW(model.parameters(), lr=lr)
+    
+    # -------------------------------------------------------------
+
+    optimizer = None
+    Adam_amsgrad = False
+    AdamW_amsgrad = False
+    SGD_nesterov = False
+    
+    if (args.optimizer == "Adam"):
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
+                               weight_decay=args.weight_decay, amsgrad=Adam_amsgrad)
+
+    if (args.optimizer  == "AdamW"):
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
+                                weight_decay=args.weight_decay, amsgrad=AdamW_amsgrad)
+
+    if (args.optimizer  == "SGD"):
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay,
+                              nesterov=SGD_nesterov)
+    
+    if (args.optimizer  == "NAdam"):
+        optimizer = torch.optim.NAdam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
+                                weight_decay=args.weight_decay, momentum_decay=0.004)
+        
+    # -------------------------------------------------------------
+        
+    scheduler = None
+
+    if (args.scheduler == "ReduceLROnPlateau"):
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',
+                                                               patience=2,
+                                                               min_lr=1e-6,
+                                                               cooldown=1,
+                                                               factor=0.5,
+                                                               verbose=True)
+        scheduler_on_batch = False
+        
+    if (args.scheduler == "StepLR"):
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 10, gamma=0.8, last_epoch=-1, verbose=True)
+        scheduler_on_batch = False
+
+    if (args.scheduler == "OneCycleLR"):
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=config.lr,
+                                                        total_steps=None, epochs=config.num_epochs,
+                                                        steps_per_epoch=len(para_train_dataloader), pct_start=0.3,
+                                                        anneal_strategy='cos', cycle_momentum=True,
+                                                        base_momentum=0.85, max_momentum=0.95,
+                                                        div_factor=25,
+                                                        final_div_factor=10000,
+                                                        three_phase=False,
+                                                        last_epoch=-1)
+
+        scheduler_on_batch = True
+    
+    # --------------------------------------------------------
     best_dev_acc = 0
 
     bce_logit_loss = nn.BCEWithLogitsLoss(reduction='sum')
@@ -221,6 +281,7 @@ def train_multitask(args):
     epoch_sst = 0
     epoch_sts = 0
 
+    # --------------------------------------------------------
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         
@@ -235,7 +296,7 @@ def train_multitask(args):
         iter_sst = iter(sst_train_dataloader)
         iter_sts = iter(sts_train_dataloader)
         
-        loop = tqdm(para_train_dataloader, bar_format='{percentage:3.0f}%|{bar:80}{r_bar}')
+        loop = tqdm(para_train_dataloader, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
         
         # loop over the largest batches
         for batch_para in loop:
@@ -283,7 +344,7 @@ def train_multitask(args):
                     batch_sts = next(iter_sts)
                 except StopIteration:
                     iter_sts = iter(sts_train_dataloader)
-                    batch_sts = next(batch_sts)
+                    batch_sts = next(iter_sts)
                     epoch_sts += 1
                     
                 sts_token_ids_1 = batch_sts['token_ids_1'].to(device)
@@ -307,12 +368,35 @@ def train_multitask(args):
             optimizer.step()            
             
             num_batches += 1
-            
+                        
+            if (scheduler is not None) and scheduler_on_batch:
+                scheduler.step()           
+                curr_lr = scheduler.get_last_lr()[0]
+                loop.set_description(f'Epoch {epoch}/{args.epochs}, {loss.item():.8f}, lr {curr_lr:.8f}')
+            else:
+                curr_lr = scheduler.optimizer.param_groups[0]['lr']
+                loop.set_description(f'Epoch {epoch}/{args.epochs}, {loss.item():.8f}, lr {curr_lr:.8f}')
+                
             # set the loop
-            loop.set_postfix_str(f"para {epoch} : {para_train_loss.avg:.4f}, sst {epoch_sst} : {sst_train_loss.avg:.4f}, sts {epoch_sts} : {sts_train_loss.avg:.4f}")
-
+            loop.set_postfix_str(f"lr {curr_lr:.4f}, para {epoch} : {para_train_loss.avg:.4f}, sst {epoch_sst} : {sst_train_loss.avg:.4f}, sts {epoch_sts} : {sts_train_loss.avg:.4f}")
         # --------------------------------------------------------------------
         
+        epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
+        
+        para_train_loss.reset()
+        sst_train_loss.reset()
+        sts_train_loss.reset()
+        
+        # --------------------------------------------------------------------
+        if (scheduler is not None) and (scheduler_on_batch == False):
+            if(isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)):
+                scheduler.step(epoch_loss)
+            else:
+                scheduler.step()
+            print(f"for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {scheduler.optimizer.param_groups[0]['lr']}")
+            
+        # --------------------------------------------------------------------
+        # validation
         para_train_accuracy, para_y_pred, para_sent_ids, \
             sst_train_accuracy,sst_y_pred, sst_sent_ids, \
             sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
@@ -399,6 +483,30 @@ def get_args():
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
 
+    parser.add_argument(
+        "--optimizer",
+        type=str,
+        default="AdamW",
+        help='Adam, Adamw, SGD, NAdam'
+    )
+        
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        default="OneCycleLR",
+        help='ReduceLROnPlateau, StepLR, or OneCycleLR'
+    )
+    
+    parser.add_argument(
+        "--activation",
+        type=str,
+        default="LeakyReLU",
+        help='ReLU, LeakyReLU, or ELU'
+    )
+    
+    parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay')
+    
+    # -------------------------------
     args = parser.parse_args()
     return args
 

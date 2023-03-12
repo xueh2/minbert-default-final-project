@@ -37,10 +37,12 @@
                 "--option", "finetune",
                 "--dp", 
                 "--use_gpu", 
-                "--without_para", "--without_sts", 
+                "--without_para", "--without_sst", 
                 "--lr", "1e-5", 
                 "--batch_size", "64", 
-                "--epochs", "20"
+                "--epochs", "20",
+                "--optimizer", "AdamW",
+                "--scheduler", "ReduceLROnPlateau"
             ]
         }
     ]
