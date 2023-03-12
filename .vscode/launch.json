@@ -42,7 +42,8 @@
                 "--batch_size", "64", 
                 "--epochs", "20",
                 "--optimizer", "AdamW",
-                "--scheduler", "ReduceLROnPlateau"
+                "--scheduler", "ReduceLROnPlateau", 
+                "--use_amp"
             ]
         }
     ]

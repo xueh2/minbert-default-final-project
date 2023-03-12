@@ -61,7 +61,7 @@ def model_eval_sst(dataloader, model, device):
 def model_eval_multitask(sentiment_dataloader,
                          paraphrase_dataloader,
                          sts_dataloader,
-                         model, device):
+                         model, device, args):
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
@@ -77,13 +77,17 @@ def model_eval_multitask(sentiment_dataloader,
                           batch['token_ids_2'], batch['attention_mask_2'],
                           batch['labels'], batch['sent_ids'])
 
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
+            b_ids1 = b_ids1.to(device, non_blocking=True)
+            b_mask1 = b_mask1.to(device, non_blocking=True)
+            b_ids2 = b_ids2.to(device, non_blocking=True)
+            b_mask2 = b_mask2.to(device, non_blocking=True)
 
-            #logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-            logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
+            if(args.use_amp):
+                with torch.cuda.amp.autocast():
+                    logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
+            else:
+                logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
+                            
             y_hat = logits.sigmoid().round().flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -106,13 +110,19 @@ def model_eval_multitask(sentiment_dataloader,
                           batch['token_ids_2'], batch['attention_mask_2'],
                           batch['labels'], batch['sent_ids'])
 
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
+            b_ids1 = b_ids1.to(device, non_blocking=True)
+            b_mask1 = b_mask1.to(device, non_blocking=True)
+            b_ids2 = b_ids2.to(device, non_blocking=True)
+            b_mask2 = b_mask2.to(device, non_blocking=True)
 
             #logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
-            logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+            
+            if(args.use_amp):
+                with torch.cuda.amp.autocast():
+                    logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+            else:
+                logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+                
             y_hat = logits.flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -131,11 +141,17 @@ def model_eval_multitask(sentiment_dataloader,
         for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval - sst', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
 
-            b_ids = b_ids.to(device)
-            b_mask = b_mask.to(device)
+            b_ids = b_ids.to(device, non_blocking=True)
+            b_mask = b_mask.to(device, non_blocking=True)
 
             #logits = model.predict_sentiment(b_ids, b_mask)
-            logits = model(b_ids, b_mask, 'sst')
+            
+            if(args.use_amp):
+                with torch.cuda.amp.autocast():
+                    logits = model(b_ids, b_mask, 'sst')
+            else:
+                logits = model(b_ids, b_mask, 'sst')
+                
             y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -157,7 +173,7 @@ def model_eval_multitask(sentiment_dataloader,
 def model_eval_test_multitask(sentiment_dataloader,
                          paraphrase_dataloader,
                          sts_dataloader,
-                         model, device):
+                         model, device, args):
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
@@ -172,13 +188,16 @@ def model_eval_test_multitask(sentiment_dataloader,
                           batch['token_ids_2'], batch['attention_mask_2'],
                           batch['sent_ids'])
 
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
+            b_ids1 = b_ids1.to(device, non_blocking=True)
+            b_mask1 = b_mask1.to(device, non_blocking=True)
+            b_ids2 = b_ids2.to(device, non_blocking=True)
+            b_mask2 = b_mask2.to(device, non_blocking=True)
 
-            #logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-            logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
+            if(args.use_amp):
+                with torch.cuda.amp.autocast():
+                    logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
+            else:
+                logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'para')
             y_hat = logits.sigmoid().round().flatten().cpu().numpy()
 
             para_y_pred.extend(y_hat)
@@ -197,13 +216,16 @@ def model_eval_test_multitask(sentiment_dataloader,
                           batch['token_ids_2'], batch['attention_mask_2'],
                           batch['sent_ids'])
 
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-
-            #logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
-            logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+            b_ids1 = b_ids1.to(device, non_blocking=True)
+            b_mask1 = b_mask1.to(device, non_blocking=True)
+            b_ids2 = b_ids2.to(device, non_blocking=True)
+            b_mask2 = b_mask2.to(device, non_blocking=True)
+            
+            if(args.use_amp):
+                with torch.cuda.amp.autocast():
+                    logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
+            else:
+                logits = model([b_ids1, b_ids2], [b_mask1, b_mask2], 'sts')
             y_hat = logits.flatten().cpu().numpy()
 
             sts_y_pred.extend(y_hat)
@@ -217,11 +239,14 @@ def model_eval_test_multitask(sentiment_dataloader,
         for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval - sst', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             b_ids, b_mask, b_sent_ids = batch['token_ids'], batch['attention_mask'],  batch['sent_ids']
 
-            b_ids = b_ids.to(device)
-            b_mask = b_mask.to(device)
-
-            #logits = model.predict_sentiment(b_ids, b_mask)
-            logits = model(b_ids, b_mask, 'sst')
+            b_ids = b_ids.to(device, non_blocking=True)
+            b_mask = b_mask.to(device, non_blocking=True)
+            
+            if(args.use_amp):
+                with torch.cuda.amp.autocast():
+                    logits = model(b_ids, b_mask, 'sst')
+            else:
+                logits = model(b_ids, b_mask, 'sst')
             y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
 
             sst_y_pred.extend(y_hat)
@@ -267,13 +292,13 @@ def test_model_multitask(args, model, device):
             dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids, dev_sts_corr, \
             dev_sts_y_pred, dev_sts_sent_ids = model_eval_multitask(sst_dev_dataloader,
                                                                     para_dev_dataloader,
-                                                                    sts_dev_dataloader, model, device)
+                                                                    sts_dev_dataloader, model, device, args)
 
         test_para_y_pred, test_para_sent_ids, test_sst_y_pred, \
             test_sst_sent_ids, test_sts_y_pred, test_sts_sent_ids = \
                 model_eval_test_multitask(sst_test_dataloader,
                                           para_test_dataloader,
-                                          sts_test_dataloader, model, device)
+                                          sts_test_dataloader, model, device, args)
 
         with open(args.sst_dev_out, "w+") as f:
             print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")

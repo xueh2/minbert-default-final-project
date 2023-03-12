@@ -161,10 +161,17 @@ def train_multitask(args):
     # check    
     assert not args.without_para or not args.without_sts or not args.without_sst
     
+    # -------------------------------------------------------
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
+    print(f"Start training ... ")
+    
     # device
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     
+    # -------------------------------------------------------
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
     
+    # -------------------------------------------------------
     # Load data    
     num_workers = 2
     
@@ -177,8 +184,8 @@ def train_multitask(args):
     sst_train_data = SentenceClassificationDataset(sst_train_dataset, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_dataset, args)
 
-    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sst_train_data.collate_fn, num_workers=num_workers)
-    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sst_dev_data.collate_fn, num_workers=num_workers)
+    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sst_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
+    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sst_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
 
     num_sst = len(sst_train_dataloader)
     print(f"sst train data has {num_sst} batches ...")
@@ -188,8 +195,8 @@ def train_multitask(args):
     para_train_data = SentencePairDataset(para_train_dataset, args, isRegression=False)
     para_dev_data = SentencePairDataset(para_dev_dataset, args, isRegression=False)
 
-    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=para_train_data.collate_fn, num_workers=num_workers)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=para_dev_data.collate_fn, num_workers=num_workers)
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=para_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=para_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
         
     num_para = len(para_train_dataloader)
     print(f"para train data has {num_para} batches ...")
@@ -199,8 +206,8 @@ def train_multitask(args):
     sts_train_data = SentencePairDataset(sts_train_dataset, args, isRegression=True)
     sts_dev_data = SentencePairDataset(sts_dev_dataset, args, isRegression=True)
 
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sts_train_data.collate_fn, num_workers=num_workers)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sts_dev_data.collate_fn, num_workers=num_workers)
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sts_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sts_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
     
     num_sts = len(sts_train_dataloader)
     print(f"sts train data has {num_sts} batches ...")
@@ -221,14 +228,10 @@ def train_multitask(args):
     if args.dp and torch.cuda.device_count()>1:
         model = torch.nn.DataParallel(model)
         with_data_parallel = True
-        print("model on data parallel")
+        print(f"{Fore.RED}--> Model on data parallel.{Style.RESET_ALL}")
         
     model = model.to(device)
-
-    # --------------------------------------------------------
-    lr = args.lr
-    #optimizer = AdamW(model.parameters(), lr=lr)
-    
+   
     # -------------------------------------------------------------
 
     optimizer = None
@@ -319,10 +322,16 @@ def train_multitask(args):
 
     print(f"number of steps per epoch is {num_step}")
     
-    # --------------------------------------------------------
+    # --------------------------------------------------------    
     
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
     
+    # --------------------------------------------------------    
+    
+    if(args.use_amp):
+        scaler = torch.cuda.amp.GradScaler()
+    
+    # --------------------------------------------------------    
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         
@@ -355,14 +364,20 @@ def train_multitask(args):
                     batch_para = next(iter_para)
                     epoch_para += 1
                     
-                para_token_ids_1 = batch_para['token_ids_1'].to(device)
-                para_attention_mask_1 = batch_para['attention_mask_1'].to(device)
-                para_token_ids_2 = batch_para['token_ids_2'].to(device)
-                para_attention_mask_2 = batch_para['attention_mask_2'].to(device)
-                para_labels = batch_para['labels'].float().to(device)
+                para_token_ids_1 = batch_para['token_ids_1'].to(device, non_blocking=True)
+                para_attention_mask_1 = batch_para['attention_mask_1'].to(device, non_blocking=True)
+                para_token_ids_2 = batch_para['token_ids_2'].to(device, non_blocking=True)
+                para_attention_mask_2 = batch_para['attention_mask_2'].to(device, non_blocking=True)
+                para_labels = batch_para['labels'].float().to(device, non_blocking=True)
                 
-                para_logits = model([para_token_ids_1, para_token_ids_2], [para_attention_mask_1, para_attention_mask_2], 'para')
-                para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / args.batch_size
+                if(args.use_amp):
+                    with torch.cuda.amp.autocast():
+                        para_logits = model([para_token_ids_1, para_token_ids_2], [para_attention_mask_1, para_attention_mask_2], 'para')
+                        para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / args.batch_size
+                else:
+                    para_logits = model([para_token_ids_1, para_token_ids_2], [para_attention_mask_1, para_attention_mask_2], 'para')                
+                    para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / args.batch_size
+                
                 para_train_loss.update(para_loss.item(), args.batch_size)        
             else:
                 para_loss = 0
@@ -380,12 +395,18 @@ def train_multitask(args):
                                         batch_sst['attention_mask'], 
                                         batch_sst['labels'])
 
-                b_ids = b_ids.to(device)
-                b_mask = b_mask.to(device)
-                b_labels = b_labels.to(device)
+                b_ids = b_ids.to(device, non_blocking=True)
+                b_mask = b_mask.to(device, non_blocking=True)
+                b_labels = b_labels.to(device, non_blocking=True)
 
-                sst_logits = model(b_ids, b_mask, 'sst')
-                sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                if(args.use_amp):
+                    with torch.cuda.amp.autocast():
+                        sst_logits = model(b_ids, b_mask, 'sst')
+                        sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                else:
+                    sst_logits = model(b_ids, b_mask, 'sst')                    
+                    sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                
                 sst_train_loss.update(sst_loss.item(), args.batch_size)
             else:
                 sst_loss = 0
@@ -399,14 +420,20 @@ def train_multitask(args):
                     batch_sts = next(iter_sts)
                     epoch_sts += 1
                     
-                sts_token_ids_1 = batch_sts['token_ids_1'].to(device)
-                sts_attention_mask_1 = batch_sts['attention_mask_1'].to(device)
-                sts_token_ids_2 = batch_sts['token_ids_2'].to(device)
-                sts_attention_mask_2 = batch_sts['attention_mask_2'].to(device)
-                sts_labels = batch_sts['labels'].float().to(device)
-
-                sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
-                sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                sts_token_ids_1 = batch_sts['token_ids_1'].to(device, non_blocking=True)
+                sts_attention_mask_1 = batch_sts['attention_mask_1'].to(device, non_blocking=True)
+                sts_token_ids_2 = batch_sts['token_ids_2'].to(device, non_blocking=True)
+                sts_attention_mask_2 = batch_sts['attention_mask_2'].to(device, non_blocking=True)
+                sts_labels = batch_sts['labels'].float().to(device, non_blocking=True)
+                
+                if(args.use_amp):
+                    with torch.cuda.amp.autocast():
+                        sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
+                        sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                else:
+                    sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
+                    sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / args.batch_size
+                    
                 sts_train_loss.update(sts_loss.item(), args.batch_size)        
             else:
                 sts_loss = 0
@@ -415,10 +442,17 @@ def train_multitask(args):
             loss = para_loss + sts_loss + sst_loss
             
             # backprop
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()            
-                                   
+            optimizer.zero_grad(set_to_none=True)
+            
+            if(args.use_amp):
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
+                                     
+            # scheduler              
             if (scheduler is not None) and scheduler_on_batch:
                 scheduler.step()           
                 curr_lr = scheduler.get_last_lr()[0]
@@ -428,7 +462,7 @@ def train_multitask(args):
                     curr_lr = args.lr
                 
             # set the loop
-            loop.set_postfix_str(f"{Fore.BLUE} lr {curr_lr:g}, {Fore.YELLOW} epoch {epoch} - step {ind_step}, {para_print_start} para {epoch_para} : {para_train_loss.avg:.4f}, {sst_print_start} sst {epoch_sst} : {sst_train_loss.avg:.4f}, {sts_print_start} sts {epoch_sts} : {sts_train_loss.avg:.4f}")
+            loop.set_postfix_str(f"{Fore.GREEN} lr {curr_lr:g}, {Fore.YELLOW} epoch {epoch} - step {ind_step}, {para_print_start} para {epoch_para} : {para_train_loss.avg:.4f}, {sst_print_start} sst {epoch_sst} : {sst_train_loss.avg:.4f}, {sts_print_start} sts {epoch_sts} : {sts_train_loss.avg:.4f}")
         # --------------------------------------------------------------------
         
         epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
@@ -459,7 +493,7 @@ def train_multitask(args):
             sts_dev_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_dev_dataloader,
                                                                         para_dev_dataloader,
                                                                         sts_dev_dataloader,
-                                                                        model, device)
+                                                                        model, device, args)
         dev_acc = para_dev_accuracy + sst_dev_accuracy + sts_dev_corr
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
@@ -521,6 +555,7 @@ def get_args():
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
     parser.add_argument("--use_gpu", action='store_true')
+    parser.add_argument("--use_amp", action='store_true')
     parser.add_argument("--dp", help='if set, perform data parallel training', action='store_true')
 
     parser.add_argument("--without_para", action='store_true')
