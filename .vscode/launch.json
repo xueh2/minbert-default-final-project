@@ -34,9 +34,13 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--option", "pretrain",
+                "--option", "finetune",
                 "--dp", 
-                "--use_gpu"
+                "--use_gpu", 
+                "--without_para", "--without_sts", 
+                "--lr", "1e-5", 
+                "--batch_size", "64", 
+                "--epochs", "20"
             ]
         }
     ]

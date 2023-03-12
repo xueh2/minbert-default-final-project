@@ -13,6 +13,7 @@ from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
+from utils import AverageMeter
 
 TQDM_DISABLE=False
 # fix the random seed
