@@ -153,9 +153,15 @@ def save_model(model, optimizer, args, config, filepath):
 
 ## Currently only trains on sst dataset
 def train_multitask(args):
-    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-    # Load data
     
+    # check    
+    assert not args.without_para or not args.without_sts or not args.without_sst
+    
+    # device
+    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    
+    
+    # Load data    
     num_workers = 2
     
     # Create the data and its corresponding datasets and dataloader
@@ -278,9 +284,25 @@ def train_multitask(args):
     bce_logit_loss = nn.BCEWithLogitsLoss(reduction='sum')
     mse_loss = nn.MSELoss(reduction='sum')
 
+    epoch_para = 0
     epoch_sst = 0
     epoch_sts = 0
-
+    
+    num_step = 0                       
+    if args.without_para is False:
+        if len(para_train_dataloader)>num_step:
+            num_step = len(para_train_dataloader)
+            
+    if args.without_sts is False:
+        if len(sts_train_dataloader)>num_step:
+            num_step = len(sts_train_dataloader)
+            
+    if args.without_sst is False:
+        if len(sst_train_dataloader)>num_step:
+            num_step = len(sst_train_dataloader)
+                
+    print(f"number of steps per epoch is {num_step}")
+    
     # --------------------------------------------------------
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -290,19 +312,30 @@ def train_multitask(args):
         sst_train_loss = AverageMeter()
         para_train_loss = AverageMeter()
         sts_train_loss = AverageMeter()
+              
+        if args.without_para is False:
+            iter_para = iter(para_train_dataloader)
         
-        num_batches = 0
-        
-        iter_sst = iter(sst_train_dataloader)
-        iter_sts = iter(sts_train_dataloader)
-        
-        loop = tqdm(para_train_dataloader, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
-        
+        if args.without_sst is False:
+            iter_sst = iter(sst_train_dataloader)
+            
+        if args.without_sts is False:
+            iter_sts = iter(sts_train_dataloader)
+
+        loop = tqdm(range(num_step), bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
+                    
         # loop over the largest batches
-        for batch_para in loop:
+        for ind_step in loop:
             
             # para
             if args.without_para is False:
+                try:
+                    batch_para = next(iter_para)
+                except StopIteration:
+                    iter_para = iter(para_train_dataloader)
+                    batch_para = next(iter_para)
+                    epoch_para += 1
+                    
                 para_token_ids_1 = batch_para['token_ids_1'].to(device)
                 para_attention_mask_1 = batch_para['attention_mask_1'].to(device)
                 para_token_ids_2 = batch_para['token_ids_2'].to(device)
@@ -366,9 +399,7 @@ def train_multitask(args):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()            
-            
-            num_batches += 1
-                        
+                                   
             if (scheduler is not None) and scheduler_on_batch:
                 scheduler.step()           
                 curr_lr = scheduler.get_last_lr()[0]
@@ -378,7 +409,7 @@ def train_multitask(args):
                 loop.set_description(f'Epoch {epoch}/{args.epochs}, {loss.item():.8f}, lr {curr_lr:.8f}')
                 
             # set the loop
-            loop.set_postfix_str(f"lr {curr_lr:.4f}, para {epoch} : {para_train_loss.avg:.4f}, sst {epoch_sst} : {sst_train_loss.avg:.4f}, sts {epoch_sts} : {sts_train_loss.avg:.4f}")
+            loop.set_postfix_str(f"lr {curr_lr:.4f}, step {ind_step}, para {epoch_para} : {para_train_loss.avg:.4f}, sst {epoch_sst} : {sst_train_loss.avg:.4f}, sts {epoch_sts} : {sts_train_loss.avg:.4f}")
         # --------------------------------------------------------------------
         
         epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
@@ -397,12 +428,12 @@ def train_multitask(args):
             
         # --------------------------------------------------------------------
         # validation
-        para_train_accuracy, para_y_pred, para_sent_ids, \
-            sst_train_accuracy,sst_y_pred, sst_sent_ids, \
-            sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
-                                                                        para_train_dataloader,
-                                                                        sts_train_dataloader,
-                                                                        model, device)
+        # para_train_accuracy, para_y_pred, para_sent_ids, \
+        #     sst_train_accuracy,sst_y_pred, sst_sent_ids, \
+        #     sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
+        #                                                                 para_train_dataloader,
+        #                                                                 sts_train_dataloader,
+        #                                                                 model, device)
             
         para_dev_accuracy, para_y_pred, para_sent_ids, \
             sst_dev_accuracy,sst_y_pred, sst_sent_ids, \
@@ -413,16 +444,16 @@ def train_multitask(args):
         dev_acc = para_dev_accuracy + sst_dev_accuracy + sts_dev_corr
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
-            if args.dp:
+            if with_data_parallel:
                 model_saved = model.module
             else:
                 model_saved = model
                 
             save_model(model_saved, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, train acc :: {sst_train_accuracy :.3f}, dev acc :: {sst_dev_accuracy :.3f}")
-        print(f"Epoch {epoch}: paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, train acc :: {para_train_accuracy :.3f}, dev acc :: {para_dev_accuracy :.3f}")
-        print(f"Epoch {epoch}: sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, train acc :: {sts_train_corr :.3f}, dev acc :: {sts_dev_corr :.3f}")
+        print(f"Epoch {epoch}: sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, dev acc :: {sst_dev_accuracy :.3f}")
+        print(f"Epoch {epoch}: paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}")
+        print(f"Epoch {epoch}: sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}")
 
 
 def test_model(args):
