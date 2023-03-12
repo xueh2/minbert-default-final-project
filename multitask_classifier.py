@@ -1,4 +1,8 @@
 import time, random, numpy as np, argparse, sys, re, os
+from colorama import init as colorama_init
+from colorama import Fore
+from colorama import Style
+
 from types import SimpleNamespace
 
 import torch
@@ -148,7 +152,7 @@ def save_model(model, optimizer, args, config, filepath):
     }
 
     torch.save(save_info, filepath)
-    print(f"save the model to {filepath}")
+    print(f"--> Save the model to {Fore.RED}{filepath}{Style.RESET_ALL}")
 
 
 ## Currently only trains on sst dataset
@@ -288,22 +292,37 @@ def train_multitask(args):
     epoch_sst = 0
     epoch_sts = 0
     
+    para_print_start = Fore.GREEN
+    sts_print_start = Fore.GREEN
+    sst_print_start = Fore.GREEN
+    
+    active_color = Fore.RED
+    
     num_step = 0                       
     if args.without_para is False:
         if len(para_train_dataloader)>num_step:
             num_step = len(para_train_dataloader)
-            
+        
+        para_print_start = active_color
+        
     if args.without_sts is False:
         if len(sts_train_dataloader)>num_step:
             num_step = len(sts_train_dataloader)
+        
+        sts_print_start = active_color
             
     if args.without_sst is False:
         if len(sst_train_dataloader)>num_step:
             num_step = len(sst_train_dataloader)
-                
+        
+        sst_print_start = active_color    
+
     print(f"number of steps per epoch is {num_step}")
     
     # --------------------------------------------------------
+    
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
+    
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         
@@ -322,7 +341,7 @@ def train_multitask(args):
         if args.without_sts is False:
             iter_sts = iter(sts_train_dataloader)
 
-        loop = tqdm(range(num_step), bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
+        loop = tqdm(range(num_step), desc=f'training loop', bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
                     
         # loop over the largest batches
         for ind_step in loop:
@@ -403,13 +422,13 @@ def train_multitask(args):
             if (scheduler is not None) and scheduler_on_batch:
                 scheduler.step()           
                 curr_lr = scheduler.get_last_lr()[0]
-                loop.set_description(f'Epoch {epoch}/{args.epochs}, {loss.item():.8f}, lr {curr_lr:.8f}')
             else:
                 curr_lr = scheduler.optimizer.param_groups[0]['lr']
-                loop.set_description(f'Epoch {epoch}/{args.epochs}, {loss.item():.8f}, lr {curr_lr:.8f}')
+                if ind_step == 0:
+                    curr_lr = args.lr
                 
             # set the loop
-            loop.set_postfix_str(f"lr {curr_lr:.4f}, step {ind_step}, para {epoch_para} : {para_train_loss.avg:.4f}, sst {epoch_sst} : {sst_train_loss.avg:.4f}, sts {epoch_sts} : {sts_train_loss.avg:.4f}")
+            loop.set_postfix_str(f"{Fore.BLUE} lr {curr_lr:g}, {Fore.YELLOW} epoch {epoch} - step {ind_step}, {para_print_start} para {epoch_para} : {para_train_loss.avg:.4f}, {sst_print_start} sst {epoch_sst} : {sst_train_loss.avg:.4f}, {sts_print_start} sts {epoch_sts} : {sts_train_loss.avg:.4f}")
         # --------------------------------------------------------------------
         
         epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
@@ -424,7 +443,7 @@ def train_multitask(args):
                 scheduler.step(epoch_loss)
             else:
                 scheduler.step()
-            print(f"for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {scheduler.optimizer.param_groups[0]['lr']}")
+            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {scheduler.optimizer.param_groups[0]['lr']}{Style.RESET_ALL}")
             
         # --------------------------------------------------------------------
         # validation
@@ -451,10 +470,10 @@ def train_multitask(args):
                 
             save_model(model_saved, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, dev acc :: {sst_dev_accuracy :.3f}")
-        print(f"Epoch {epoch}: paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}")
-        print(f"Epoch {epoch}: sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}")
-
+        print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
 
 def test_model(args):
     with torch.no_grad():
@@ -542,6 +561,9 @@ def get_args():
     return args
 
 if __name__ == "__main__":
+    
+    colorama_init()
+    
     args = get_args()
     args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility

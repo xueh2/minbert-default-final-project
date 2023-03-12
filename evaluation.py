@@ -70,7 +70,7 @@ def model_eval_multitask(sentiment_dataloader,
         para_sent_ids = []
 
         # Evaluate paraphrase detection.
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval - para', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -99,7 +99,7 @@ def model_eval_multitask(sentiment_dataloader,
 
 
         # Evaluate semantic textual similarity.
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval - sts', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -128,7 +128,7 @@ def model_eval_multitask(sentiment_dataloader,
         sst_sent_ids = []
 
         # Evaluate sentiment classification.
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval - sst', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
 
             b_ids = b_ids.to(device)
@@ -145,9 +145,9 @@ def model_eval_multitask(sentiment_dataloader,
 
         sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
 
-        print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
-        print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
-        print(f'Semantic Textual Similarity correlation: {sts_corr:.3f}')
+        # print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
+        # print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
+        # print(f'Semantic Textual Similarity correlation: {sts_corr:.3f}')
 
         return (paraphrase_accuracy, para_y_pred, para_sent_ids,
                 sentiment_accuracy,sst_y_pred, sst_sent_ids,
@@ -165,7 +165,7 @@ def model_eval_test_multitask(sentiment_dataloader,
         para_y_pred = []
         para_sent_ids = []
         # Evaluate paraphrase detection.
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval - para', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -190,7 +190,7 @@ def model_eval_test_multitask(sentiment_dataloader,
 
 
         # Evaluate semantic textual similarity.
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval - sts', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -214,7 +214,7 @@ def model_eval_test_multitask(sentiment_dataloader,
         sst_sent_ids = []
 
         # Evaluate sentiment classification.
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval - sst', disable=TQDM_DISABLE, bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')):
             b_ids, b_mask, b_sent_ids = batch['token_ids'], batch['attention_mask'],  batch['sent_ids']
 
             b_ids = b_ids.to(device)
