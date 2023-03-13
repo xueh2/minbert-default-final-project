@@ -37,17 +37,17 @@ class MultitaskBERT(nn.Module):
         self.pooler_af = nn.Tanh()
     
         # sentiment
-        self.sentiment_drop_out = torch.nn.Dropout(0.1)
+        self.sentiment_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_output_proj = torch.nn.Linear(config.hidden_size, 5)
 
         # paraphrase
-        self.paraphrase_drop_out = torch.nn.Dropout(0.1)
+        self.paraphrase_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
         self.paraphrase_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
         self.paraphrase_nl = F.gelu
         self.paraphrase_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
                 
         # similarity, sts
-        self.similarity_drop_out = torch.nn.Dropout(0.1)
+        self.similarity_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
         self.similarity_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
         self.similarity_nl = F.gelu
         if config.sts_train_method == "regression":
@@ -60,6 +60,7 @@ class MultitaskBERT(nn.Module):
         
         #sequence_output = self.bert2.encode(res['last_hidden_state'], attention_mask=attention_mask)
         sequence_output = res['last_hidden_state']        
+        
         first_tk = sequence_output[:, 0]
         first_tk = self.bert.pooler_dense(first_tk)
     

@@ -249,7 +249,10 @@ def convert_logits_to_label_STS(logits):
             loc2 = compute_label(p_large, max_prob_ind[b], p_small2, max_prob_ind[b]+1)
             
             loc = loc1 if p_small1>p_small2 else loc2
-            
+        
+        loc = 0 if loc < 0 else loc
+        loc = 5 if loc > 5 else loc
+        
         labels[b] = loc    
 
     return labels

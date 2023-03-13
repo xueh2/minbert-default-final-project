@@ -9,11 +9,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
+import wandb
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, SentencePairSTSDataset, convert_logits_to_label_STS, \
     load_multitask_data, load_multitask_test_data
@@ -51,14 +52,14 @@ def save_model(model, optimizer, args, config, filepath):
     }
 
     torch.save(save_info, filepath)
-    print(f"--> Save the model to {Fore.RED}{filepath}{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}--> Save the model to {filepath}{Style.RESET_ALL}")
 
 # -------------------------------------------------------
 def corr_coef(y, y_hat):
     vy = y - torch.mean(y)
     vy_hat = y_hat - torch.mean(y_hat)
 
-    cost = torch.sum(vy * vy_hat) / (torch.sqrt(torch.sum(vy ** 2)) * torch.sqrt(torch.sum(vy_hat ** 2)))
+    cost = torch.sum(vy * vy_hat) / (torch.sqrt(torch.sum(vy ** 2)) * torch.sqrt(torch.sum(vy_hat ** 2)) + 1e-4)
     
     return cost
 
@@ -71,7 +72,7 @@ def train_multitask(args):
     
     # -------------------------------------------------------
     
-    writer = SummaryWriter(log_dir=f"multi-task/{args.experiment}")
+    # writer = SummaryWriter(log_dir=f"multi-task/{args.experiment}")
     
     # -------------------------------------------------------
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
@@ -215,8 +216,8 @@ def train_multitask(args):
 
     if (args.scheduler == "ReduceLROnPlateau"):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',
-                                                               patience=2,
-                                                               min_lr=1e-6,
+                                                               patience=1,
+                                                               min_lr=1e-7,
                                                                cooldown=1,
                                                                factor=0.5,
                                                                verbose=True)
@@ -227,8 +228,8 @@ def train_multitask(args):
         scheduler_on_batch = False
 
     if (args.scheduler == "OneCycleLR"):
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=config.lr,
-                                                        total_steps=None, epochs=config.num_epochs,
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr,
+                                                        total_steps=None, epochs=args.epochs,
                                                         steps_per_epoch=num_step, pct_start=0.3,
                                                         anneal_strategy='cos', cycle_momentum=True,
                                                         base_momentum=0.85, max_momentum=0.95,
@@ -267,6 +268,8 @@ def train_multitask(args):
         if args.without_sts is False:
             iter_sts = iter(sts_train_dataloader)
 
+        print(f"{Fore.GREEN}Epoch {epoch} starts ... {Style.RESET_ALL}")
+        
         loop = tqdm(range(num_step), desc=f'training loop', bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
                     
         # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -407,39 +410,51 @@ def train_multitask(args):
             
             # ---------------------------------------------------------------------
             # add summary
-            if args.without_para is False:
-                writer.add_scalar("para_loss", para_loss.item(), ind_step + num_step * epoch)
-                writer.add_scalar("para_train_loss", para_train_loss.avg, ind_step + num_step * epoch)
-            if args.without_sts is False:
-                writer.add_scalar("sts_loss", sts_loss.item(), ind_step + num_step * epoch)
-                writer.add_scalar("sts_train_loss", sts_train_loss.avg, ind_step + num_step * epoch)
-            if args.without_sst is False:
-                writer.add_scalar("sst_loss", sst_loss.item(), ind_step + num_step * epoch)
-                writer.add_scalar("sst_train_loss", sst_train_loss.avg, ind_step + num_step * epoch)
+            if args.wandb:
+                if args.without_para is False:
+                    #writer.add_scalar("para_loss", para_loss.item(), ind_step + num_step * epoch)
+                    #writer.add_scalar("para_train_loss", para_train_loss.avg, ind_step + num_step * epoch)                   
+                    wandb.log({"para_loss": para_loss.item(), "para_train_loss":para_train_loss.avg})
+                        
+                if args.without_sts is False:
+                    #writer.add_scalar("sts_loss", sts_loss.item(), ind_step + num_step * epoch)
+                    #writer.add_scalar("sts_train_loss", sts_train_loss.avg, ind_step + num_step * epoch)
+                    wandb.log({"sts_loss": sts_loss.item(), "sts_train_loss":sts_train_loss.avg})
+                        
+                if args.without_sst is False:
+                    #writer.add_scalar("sst_loss", sst_loss.item(), ind_step + num_step * epoch)
+                    #writer.add_scalar("sst_train_loss", sst_train_loss.avg, ind_step + num_step * epoch)
+                    wandb.log({"sst_loss": sst_loss.item(), "sst_train_loss":sst_train_loss.avg})
+                
                 
         # ------------------------------------------------------------------------------------------------------------
         
         epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
-        writer.add_scalar("epoch_loss", epoch_loss, epoch)
-               
+        #writer.add_scalar("epoch_loss", epoch_loss, epoch)
+        if args.wandb:
+            wandb.log({"epoch":epoch, "epoch_loss": epoch_loss})
+                          
         # --------------------------------------------------------------------
         if (scheduler is not None) and (scheduler_on_batch == False):
             if(isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)):
                 scheduler.step(epoch_loss)
             else:
                 scheduler.step()
-            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {scheduler.optimizer.param_groups[0]['lr']}{Style.RESET_ALL}")
-            
-            writer.add_scalar("epoch_lr", scheduler.optimizer.param_groups[0]['lr'], epoch)
-            
+                
+            epoch_lr = scheduler.optimizer.param_groups[0]['lr']
+            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {epoch_lr}{Style.RESET_ALL}")
+                        
+            #writer.add_scalar("epoch_lr", epoch_lr)
+            if args.wandb:
+                wandb.log({"epoch":epoch, "epoch_lr": epoch_lr})
         # --------------------------------------------------------------------
         # validation
-        # para_train_accuracy, para_y_pred, para_sent_ids, \
-        #     sst_train_accuracy,sst_y_pred, sst_sent_ids, \
-        #     sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
-        #                                                                 para_train_dataloader,
-        #                                                                 sts_train_dataloader,
-        #                                                                 model, device)
+        para_train_accuracy, para_y_pred, para_sent_ids, \
+            sst_train_accuracy,sst_y_pred, sst_sent_ids, \
+            sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
+                                                                        para_train_dataloader,
+                                                                        sts_train_dataloader,
+                                                                        model, device, args)
             
         para_dev_accuracy, para_y_pred, para_sent_ids, \
             sst_dev_accuracy,sst_y_pred, sst_sent_ids, \
@@ -458,19 +473,28 @@ def train_multitask(args):
             save_model(model_saved, optimizer, args, config, args.filepath)
 
         print(f"{Fore.YELLOW}--> dev acc is {dev_acc:.4f} for epoch {epoch}.{Style.RESET_ALL}")
-        writer.add_scalar("dev_acc", dev_acc, epoch)        
+        #writer.add_scalar("dev_acc", dev_acc, epoch)        
         
         if args.without_sst is False:
-            print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
-            writer.add_scalar("sst_dev_accuracy", sst_dev_accuracy, epoch)
+            print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, train acc :: {sst_train_accuracy :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
+            #writer.add_scalar("sst_train_accuracy", sst_train_accuracy, epoch)
+            #writer.add_scalar("sst_dev_accuracy", sst_dev_accuracy, epoch)
+            if args.wandb:
+                wandb.log({"epoch":epoch, "sst_train_accuracy": sst_train_accuracy, "sst_dev_accuracy":sst_dev_accuracy})
                 
         if args.without_para is False:
-            print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
-            writer.add_scalar("para_dev_accuracy", para_dev_accuracy, epoch)
-            
+            print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, train acc :: {para_train_accuracy :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
+            #writer.add_scalar("para_train_accuracy", para_train_accuracy, epoch)
+            #writer.add_scalar("para_dev_accuracy", para_dev_accuracy, epoch)
+            if args.wandb:
+                wandb.log({"epoch":epoch, "para_train_accuracy": para_train_accuracy, "para_dev_accuracy":para_dev_accuracy})
+                
         if args.without_sts is False:
-            print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
-            writer.add_scalar("sts_dev_corr", sts_dev_corr, epoch)    
+            print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, train corr :: {sts_train_corr :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
+            #writer.add_scalar("sts_train_corr", sts_dev_corr, epoch)    
+            #writer.add_scalar("sts_dev_corr", sts_dev_corr, epoch)    
+            if args.wandb:
+                wandb.log({"epoch":epoch, "sts_train_corr": sts_train_corr, "sts_dev_corr":sts_dev_corr})
                 
         print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
         
@@ -535,6 +559,8 @@ def get_args():
     parser.add_argument("--without_sst", action='store_true')
     parser.add_argument("--without_sts", action='store_true')
 
+    parser.add_argument("--wandb", action='store_true')
+    
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.1)
@@ -587,6 +613,13 @@ if __name__ == "__main__":
     
     args = get_args()
     args.filepath = f'{args.option}-{args.epochs}-{args.lr}-{args.experiment}.pt' # save path
+    
+    moment = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    
+    if(args.wandb):
+        wandb.init(project="CS224", group=args.experiment, config=args, tags=moment)
+        wandb.watch_called = False
+            
     #seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask(args)
     test_model(args)
