@@ -523,7 +523,7 @@ def get_args():
 
     # traning parameter
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
@@ -536,8 +536,8 @@ def get_args():
     parser.add_argument("--without_sts", action='store_true')
 
     # hyper parameters
-    parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=8)
-    parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
+    parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
+    parser.add_argument("--hidden_dropout_prob", type=float, default=0.1)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
 

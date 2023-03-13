@@ -59,11 +59,14 @@ class MultitaskBERT(nn.Module):
         res = self.bert(input_ids, attention_mask)
         
         #sequence_output = self.bert2.encode(res['last_hidden_state'], attention_mask=attention_mask)
-        sequence_output = res['last_hidden_state']
-        
+        sequence_output = res['last_hidden_state']        
         first_tk = sequence_output[:, 0]
+        first_tk = self.bert.pooler_dense(first_tk)
+    
+        #first_tk = res['pooler_output']
         
-        first_tk = self.pooler_dense(first_tk)
+        #first_tk = sequence_output[:, 0]
+        #first_tk = self.pooler_dense(first_tk)
         #first_tk = self.pooler_af(first_tk)
     
         return first_tk, sequence_output
