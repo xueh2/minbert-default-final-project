@@ -1,9 +1,15 @@
 # single task
 
-python classifier.py --option finetune --use_gpu --batch_size 64 --epochs 20 --lr 1e-5
+# python classifier.py --option finetune --use_gpu --batch_size 64 --epochs 20 --lr 1e-5
 
 # multi-task
 
-python multitask_classifier.py --option finetune --dp --use_gpu --without_para --without_sts --lr 1e-5 --batch_size 64 --epochs 20 --optimizer AdamW --scheduler ReduceLROnPlateau
+export lr=1e-3
 
-python multitask_classifier.py --option finetune --dp --use_gpu --without_para --without_sts --lr 1e-3 --batch_size 64 --epochs 20 --optimizer AdamW --scheduler ReduceLROnPlateau --sts_train_method classification
+python3 multitask_classifier.py --option finetune --dp --use_gpu --without_para --without_sts --lr ${lr} --batch_size 64 --epochs 30 --optimizer SGD --scheduler StepLR --StepLR_step_size 4 --sts_train_method classification --experiment only_sst
+
+python3 multitask_classifier.py --option finetune --dp --use_gpu --without_sst --without_sts --lr ${lr} --batch_size 64 --epochs 30 --optimizer SGD --scheduler StepLR --StepLR_step_size 4 --sts_train_method classification --experiment only_para
+
+python3 multitask_classifier.py --option finetune --dp --use_gpu --without_para --without_sst --lr ${lr} --batch_size 64 --epochs 30 --optimizer SGD --scheduler StepLR --StepLR_step_size 4 --sts_train_method classification --experiment only_sts
+
+python3 multitask_classifier.py --option finetune --dp --use_gpu --without_para --without_sts --lr ${lr} --batch_size 64 --epochs 30 --optimizer SGD --scheduler StepLR --StepLR_step_size 4 --sts_train_method classification --weight_decay 1e-4 --experiment only_sst_weight_decay

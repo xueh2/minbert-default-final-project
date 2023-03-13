@@ -71,7 +71,7 @@ def train_multitask(args):
     
     # -------------------------------------------------------
     
-    writer = SummaryWriter(log_dir="multi-task")
+    writer = SummaryWriter(log_dir="multi-task", comment=args.experiment)
     
     # -------------------------------------------------------
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
@@ -454,6 +454,7 @@ def train_multitask(args):
                 
             save_model(model_saved, optimizer, args, config, args.filepath)
 
+        print(f"{Fore.YELLOW}--> dev acc is {dev_acc:.4f} for epoch {epoch}.{Style.RESET_ALL}")
         writer.add_scalar("dev_acc", dev_acc, epoch)        
         
         if args.without_sst is False:
@@ -569,6 +570,8 @@ def get_args():
     
     parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay')
     
+    parser.add_argument('--experiment', type=str, default="multi-task", help='experiment string')
+
     # -------------------------------
     args = parser.parse_args()
     return args
@@ -580,7 +583,7 @@ if __name__ == "__main__":
     colorama_init()
     
     args = get_args()
-    args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    args.filepath = f'{args.option}-{args.epochs}-{args.lr}-{args.experiment}.pt' # save path
     #seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask(args)
     test_model(args)
