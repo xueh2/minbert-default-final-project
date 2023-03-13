@@ -15,7 +15,7 @@ from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
-from datasets import SentenceClassificationDataset, SentencePairDataset, SentencePairSTSDataset, \
+from datasets import SentenceClassificationDataset, SentencePairDataset, SentencePairSTSDataset, convert_logits_to_label_STS, \
     load_multitask_data, load_multitask_test_data
 
 from evaluation import model_eval_sst, model_eval_multitask, test_model_multitask
@@ -71,7 +71,7 @@ def train_multitask(args):
     
     # -------------------------------------------------------
     
-    writer = SummaryWriter(log_dir="multi-task", comment=args.experiment)
+    writer = SummaryWriter(log_dir=f"multi-task/{args.experiment}")
     
     # -------------------------------------------------------
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
@@ -368,7 +368,10 @@ def train_multitask(args):
                     else:
                         sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
                         sts_y_hat_prob = F.log_softmax(sts_logits, dim=1)
-                        sts_loss = kl_loss(sts_y_hat_prob, sts_probs) / args.batch_size
+                        
+                        sts_labels_y_hat = convert_logits_to_label_STS(sts_logits)
+                        
+                        sts_loss = l1_loss(sts_labels_y_hat, sts_labels) / args.batch_size + (1.0 - corr_coef(sts_labels_y_hat, sts_labels)) + kl_loss(sts_y_hat_prob, sts_probs) / args.batch_size
                     
                 sts_train_loss.update(sts_loss.item(), args.batch_size)        
             else:
