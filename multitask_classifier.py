@@ -412,27 +412,25 @@ def train_multitask(args):
             # add summary
             if args.wandb:
                 if args.without_para is False:
-                    #writer.add_scalar("para_loss", para_loss.item(), ind_step + num_step * epoch)
-                    #writer.add_scalar("para_train_loss", para_train_loss.avg, ind_step + num_step * epoch)                   
-                    wandb.log({"para_loss": para_loss.item(), "para_train_loss":para_train_loss.avg})
+                    wandb.log({"para/loss": para_loss.item(), "para/train_loss":para_train_loss.avg})
                         
                 if args.without_sts is False:
-                    #writer.add_scalar("sts_loss", sts_loss.item(), ind_step + num_step * epoch)
-                    #writer.add_scalar("sts_train_loss", sts_train_loss.avg, ind_step + num_step * epoch)
-                    wandb.log({"sts_loss": sts_loss.item(), "sts_train_loss":sts_train_loss.avg})
+                    wandb.log({"sts/loss": sts_loss.item(), "sts/train_loss":sts_train_loss.avg})
                         
                 if args.without_sst is False:
-                    #writer.add_scalar("sst_loss", sst_loss.item(), ind_step + num_step * epoch)
-                    #writer.add_scalar("sst_train_loss", sst_train_loss.avg, ind_step + num_step * epoch)
-                    wandb.log({"sst_loss": sst_loss.item(), "sst_train_loss":sst_train_loss.avg})
+                    wandb.log({"sst/loss": sst_loss.item(), "sst/train_loss":sst_train_loss.avg})
                 
                 
         # ------------------------------------------------------------------------------------------------------------
-        
-        epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
-        #writer.add_scalar("epoch_loss", epoch_loss, epoch)
+
         if args.wandb:
-            wandb.log({"epoch":epoch, "epoch_loss": epoch_loss})
+            wandb.define_metric("epoch")
+            wandb.log({"epoch":epoch})
+            
+        epoch_loss = para_train_loss.avg + sst_train_loss.avg + sts_train_loss.avg
+        if args.wandb:
+            wandb.define_metric("epoch_loss", step_metric='epoch')
+            wandb.log({"epoch_loss": epoch_loss})
                           
         # --------------------------------------------------------------------
         if (scheduler is not None) and (scheduler_on_batch == False):
@@ -444,9 +442,9 @@ def train_multitask(args):
             epoch_lr = scheduler.optimizer.param_groups[0]['lr']
             print(f"{Fore.YELLOW}for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {epoch_lr}{Style.RESET_ALL}")
                         
-            #writer.add_scalar("epoch_lr", epoch_lr)
             if args.wandb:
-                wandb.log({"epoch":epoch, "epoch_lr": epoch_lr})
+                wandb.define_metric("epoch_lr", step_metric='epoch')
+                wandb.log({"epoch_lr": epoch_lr})
         # --------------------------------------------------------------------
         # validation
         para_train_accuracy, para_y_pred, para_sent_ids, \
@@ -473,28 +471,29 @@ def train_multitask(args):
             save_model(model_saved, optimizer, args, config, args.filepath)
 
         print(f"{Fore.YELLOW}--> dev acc is {dev_acc:.4f} for epoch {epoch}.{Style.RESET_ALL}")
-        #writer.add_scalar("dev_acc", dev_acc, epoch)        
         
         if args.without_sst is False:
             print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, train acc :: {sst_train_accuracy :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
-            #writer.add_scalar("sst_train_accuracy", sst_train_accuracy, epoch)
-            #writer.add_scalar("sst_dev_accuracy", sst_dev_accuracy, epoch)
             if args.wandb:
-                wandb.log({"epoch":epoch, "sst_train_accuracy": sst_train_accuracy, "sst_dev_accuracy":sst_dev_accuracy})
+                wandb.define_metric("sst/epoch")
+                wandb.define_metric("sst/train_accuracy", step_metric='sst/epoch')
+                wandb.define_metric("sst/dev_accuracy", step_metric='sst/epoch')
+                wandb.log({"sst/epoch":epoch, "sst/train_accuracy": sst_train_accuracy, "sst/dev_accuracy":sst_dev_accuracy})
                 
         if args.without_para is False:
             print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, train acc :: {para_train_accuracy :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
-            #writer.add_scalar("para_train_accuracy", para_train_accuracy, epoch)
-            #writer.add_scalar("para_dev_accuracy", para_dev_accuracy, epoch)
             if args.wandb:
-                wandb.log({"epoch":epoch, "para_train_accuracy": para_train_accuracy, "para_dev_accuracy":para_dev_accuracy})
+                wandb.define_metric("para/epoch")
+                wandb.define_metric("para/train_accuracy", step_metric='para/epoch')
+                wandb.define_metric("para/dev_accuracy", step_metric='para/epoch')
+                wandb.log({"para/epoch":epoch, "para/train_accuracy": para_train_accuracy, "para/dev_accuracy":para_dev_accuracy})
                 
         if args.without_sts is False:
             print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, train corr :: {sts_train_corr :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
-            #writer.add_scalar("sts_train_corr", sts_dev_corr, epoch)    
-            #writer.add_scalar("sts_dev_corr", sts_dev_corr, epoch)    
             if args.wandb:
-                wandb.log({"epoch":epoch, "sts_train_corr": sts_train_corr, "sts_dev_corr":sts_dev_corr})
+                wandb.define_metric("sts/epoch")
+                wandb.define_metric("sts/*", step_metric='sts/epoch')
+                wandb.log({"sts/epoch":epoch, "sts/train_corr": sts_train_corr, "sts/dev_corr":sts_dev_corr})
                 
         print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
         
