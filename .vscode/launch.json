@@ -43,7 +43,8 @@
                 "--epochs", "20",
                 "--optimizer", "AdamW",
                 "--scheduler", "ReduceLROnPlateau", 
-                "--sts_train_method", "classification"
+                "--sts_train_method", "classification",
+                "--wandb"
             ]
         }
     ]

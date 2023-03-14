@@ -469,7 +469,12 @@ def train_multitask(args):
                 model_saved = model
                 
             save_model(model_saved, optimizer, args, config, args.filepath)
-
+            print(f"{Fore.GREEN}--> for saved model, para_dev_accuracy is {para_dev_accuracy:.4f}, sst_dev_accuracy is {sst_dev_accuracy:.4f}, sts_dev_corr is {sts_dev_corr:.4f}{Style.RESET_ALL}")
+            if args.wandb:
+                wandb.run.summary["best_model_para_dev_accuracy"] = para_dev_accuracy
+                wandb.run.summary["best_model_sst_dev_accuracy"] = sst_dev_accuracy
+                wandb.run.summary["best_model_sts_dev_corr"] = sts_dev_corr
+                
         print(f"{Fore.YELLOW}--> dev acc is {dev_acc:.4f} for epoch {epoch}.{Style.RESET_ALL}")
         
         if args.without_sst is False:
@@ -480,6 +485,11 @@ def train_multitask(args):
                 wandb.define_metric("sst/dev_accuracy", step_metric='sst/epoch')
                 wandb.log({"sst/epoch":epoch, "sst/train_accuracy": sst_train_accuracy, "sst/dev_accuracy":sst_dev_accuracy})
                 
+                wandb.define_metric("sst_train_accuracy", step_metric='epoch')
+                wandb.log({"sst_train_accuracy": sst_train_accuracy})
+                wandb.define_metric("sst_dev_accuracy", step_metric='epoch')
+                wandb.log({"sst_dev_accuracy": sst_dev_accuracy})
+            
         if args.without_para is False:
             print(f"{Fore.YELLOW}Epoch {epoch}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, train acc :: {para_train_accuracy :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
             if args.wandb:
@@ -488,12 +498,22 @@ def train_multitask(args):
                 wandb.define_metric("para/dev_accuracy", step_metric='para/epoch')
                 wandb.log({"para/epoch":epoch, "para/train_accuracy": para_train_accuracy, "para/dev_accuracy":para_dev_accuracy})
                 
+                wandb.define_metric("para_train_accuracy", step_metric='epoch')
+                wandb.log({"para_train_accuracy": para_train_accuracy})
+                wandb.define_metric("para_dev_accuracy", step_metric='epoch')
+                wandb.log({"para_dev_accuracy": para_dev_accuracy})
+                
         if args.without_sts is False:
             print(f"{Fore.YELLOW}Epoch {epoch}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, train corr :: {sts_train_corr :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
             if args.wandb:
                 wandb.define_metric("sts/epoch")
                 wandb.define_metric("sts/*", step_metric='sts/epoch')
                 wandb.log({"sts/epoch":epoch, "sts/train_corr": sts_train_corr, "sts/dev_corr":sts_dev_corr})
+                
+                wandb.define_metric("sts_train_corr", step_metric='epoch')
+                wandb.log({"sts_train_corr": sts_train_corr})
+                wandb.define_metric("sts_dev_corr", step_metric='epoch')
+                wandb.log({"sts_dev_corr": sts_dev_corr})
                 
         print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
         
