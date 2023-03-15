@@ -15,6 +15,7 @@ so unless you change it you shouldn't need to call anything from here
 explicitly aside from model_eval_multitask.
 '''
 
+import os
 import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report, f1_score, recall_score, accuracy_score
@@ -324,35 +325,37 @@ def test_model_multitask(args, model, device):
                                           para_test_dataloader,
                                           sts_test_dataloader, model, device, args)
 
-        with open(args.sst_dev_out, "w+") as f:
+        os.makedirs(args.experiment, exist_ok=True)
+
+        with open(os.path.join(args.experiment, args.sst_dev_out), "w+") as f:
             print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
             f.write(f"id \t Predicted_Sentiment \n")
             for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(args.sst_test_out, "w+") as f:
+        with open(os.path.join(args.experiment, args.sst_test_out), "w+") as f:
             f.write(f"id \t Predicted_Sentiment \n")
             for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(args.para_dev_out, "w+") as f:
+        with open(os.path.join(args.experiment, args.para_dev_out), "w+") as f:
             print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
             f.write(f"id \t Predicted_Is_Paraphrase \n")
             for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(args.para_test_out, "w+") as f:
+        with open(os.path.join(args.experiment, args.para_test_out), "w+") as f:
             f.write(f"id \t Predicted_Is_Paraphrase \n")
             for p, s in zip(test_para_sent_ids, test_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(args.sts_dev_out, "w+") as f:
+        with open(os.path.join(args.experiment, args.sts_dev_out), "w+") as f:
             print(f"dev sts corr :: {dev_sts_corr :.3f}")
             f.write(f"id \t Predicted_Similiary \n")
             for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(args.sts_test_out, "w+") as f:
+        with open(os.path.join(args.experiment, args.sts_test_out), "w+") as f:
             f.write(f"id \t Predicted_Similiary \n")
             for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                 f.write(f"{p} , {s} \n")
