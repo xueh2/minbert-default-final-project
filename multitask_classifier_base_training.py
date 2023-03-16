@@ -227,7 +227,7 @@ def get_args(parser = argparse.ArgumentParser("multi-task")):
     
     parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay')
     
-    parser.add_argument('--num_steps', type=str, default="max", help='max or min; use the max of all tasks as num_step or minimal value')
+    parser.add_argument('--num_steps', type=str, default="mean", help='max or min or mean; use the max of all tasks as num_step or minimal value or mean')
     
     parser.add_argument('--experiment', type=str, default="multi-task", help='experiment string')
 

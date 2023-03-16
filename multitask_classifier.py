@@ -90,8 +90,10 @@ def train_multitask(args):
 
     if args.num_steps == "min":
         num_step = min(num_steps)
-    else:
+    elif args.num_steps == "max":
         num_step = max(num_steps)
+    else:
+        num_step = int(np.mean(np.array(num_steps)))
 
     print(f"number of steps per epoch is {num_step}")
     
