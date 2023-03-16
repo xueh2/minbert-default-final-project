@@ -21,3 +21,5 @@ python3 multitask_classifier.py --option finetune --dp --use_gpu --without_sts -
 # all three
 python3 multitask_classifier.py --option finetune --dp --use_gpu --lr ${lr} --batch_size ${batch_size} --epochs ${epochs} --optimizer ${optimizer} --scheduler ${scheduler} --StepLR_step_size ${StepLR_step_size} --sts_train_method regression  --weight_decay 1.0 --experiment all_weight_decay --wandb
 
+python3 multitask_classifier.py --option finetune --dp --use_gpu --lr ${lr} --batch_size ${batch_size} --epochs ${epochs} --optimizer ${optimizer} --scheduler ${scheduler} --StepLR_step_size ${StepLR_step_size} --sts_train_method regression  --weight_decay 1.0 --experiment all_weight_decay_min_num_steps --num_steps min --wandb
+
