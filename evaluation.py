@@ -326,7 +326,8 @@ def test_model_multitask(args, model, device):
                                           sts_test_dataloader, model, device, args)
 
         os.makedirs(args.experiment, exist_ok=True)
-
+        os.makedirs(os.path.join(args.experiment, "predictions"), exist_ok=True)
+        
         with open(os.path.join(args.experiment, args.sst_dev_out), "w+") as f:
             print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
             f.write(f"id \t Predicted_Sentiment \n")
