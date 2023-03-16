@@ -2,8 +2,7 @@
 from multitask_classifier_base_training import * 
 
 # -------------------------------------------------------
-## Currently only trains on sst dataset
-def train_multitask(args):
+def train_multitask_reptile(args):
 
     device, sst_train_dataset, num_labels, para_train_dataset, sts_train_dataset, \
     sst_dev_dataset, num_labels, para_dev_dataset, sts_dev_dataset, \
@@ -75,23 +74,24 @@ def train_multitask(args):
     
     active_color = Fore.RED
     
-    num_steps = []
+    num_step = 0                       
     if args.without_para is False:
-        num_steps.append(len(para_train_dataloader))
+        if len(para_train_dataloader)>num_step:
+            num_step = len(para_train_dataloader)
+        
         para_print_start = active_color
         
     if args.without_sts is False:
-        num_steps.append(len(sts_train_dataloader))
+        if len(sts_train_dataloader)>num_step:
+            num_step = len(sts_train_dataloader)
+        
         sts_print_start = active_color
             
-    if args.without_sst is False:        
-        num_steps.append(len(sst_train_dataloader))
+    if args.without_sst is False:
+        if len(sst_train_dataloader)>num_step:
+            num_step = len(sst_train_dataloader)
+        
         sst_print_start = active_color    
-
-    if args.num_steps == "min":
-        num_step = min(num_steps)
-    else:
-        num_step = max(num_steps)
 
     print(f"number of steps per epoch is {num_step}")
     
@@ -158,7 +158,7 @@ def train_multitask(args):
         loop = tqdm(range(num_step), desc=f'training loop', bar_format='{percentage:3.0f}%|{bar:40}{r_bar}')
                     
         # -----------------------------------------------------------------------------------------------------------------------------------------
-        # loop over the steps
+        # loop over the largest batches
         for ind_step in loop:
             
             # ---------------------------------------------------------------------
@@ -409,22 +409,33 @@ def train_multitask(args):
 
 # -----------------------------------------------------------------------------------------------------------------------------------------
 
+def get_args_reptile(parser = argparse.ArgumentParser("multi-task-reptile")):
+
+    parser = get_args(parser=parser)
+
+    # meta iterations
+    parser.add_argument("--meta_iter", type=int, default=30, help="number of outter meta-iteration")
+
+    return parser
+
+# -----------------------------------------------------------------------------------------------------------------------------------------
+
 if __name__ == "__main__":
     
     colorama_init()
     
-    parser = get_args()
+    parser = get_args_reptile(parser = argparse.ArgumentParser("multi-task-reptile"))
     args = parser.parse_args()
-    
+        
     moment = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     
     os.makedirs(os.path.join("runs", args.experiment), exist_ok=True)
-    args.filepath = os.path.join("runs", args.experiment, f'{args.option}-{args.epochs}-{args.lr}-{args.experiment}-{moment}.pt') # save path
+    args.filepath = os.path.join("runs", args.experiment, f'{args.option}-{args.epochs}-{args.lr}-{args.experiment}-reptile-{moment}.pt') # save path
     
     if(args.wandb):
         wandb.init(project="CS224", group=args.experiment, config=args, tags=moment)
         wandb.watch_called = False
             
     #seed_everything(args.seed)  # fix the seed for reproducibility
-    train_multitask(args)
+    train_multitask_reptile(args)
     test_model(args)
