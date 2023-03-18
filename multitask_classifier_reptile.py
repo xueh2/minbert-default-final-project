@@ -464,8 +464,14 @@ def train_multitask_reptile(args):
                                                                             model, device, args)
             
             # -------------------------------------------
-            
-            dev_acc = para_dev_accuracy + sst_dev_accuracy + sts_dev_corr
+            dev_acc = 0
+            if args.task_sample_prob_para>0:
+                dev_acc += para_dev_accuracy
+            if args.task_sample_prob_sst>0:
+                dev_acc += sst_dev_accuracy
+            if args.task_sample_prob_sts>0:
+                dev_acc += sts_dev_corr
+
             if dev_acc > best_dev_acc:
                 best_dev_acc = dev_acc
                 if with_data_parallel:

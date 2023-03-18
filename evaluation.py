@@ -325,12 +325,13 @@ def test_model_multitask(args, model, device):
                                           para_test_dataloader,
                                           sts_test_dataloader, model, device, args)
 
-        os.makedirs(args.experiment, exist_ok=True)
-        output_dir = os.path.join(args.experiment, "predictions")
+        os.makedirs(os.path.join("runs", args.experiment), exist_ok=True)
+        output_dir = os.path.join("runs", args.experiment, "predictions")
         os.makedirs(output_dir, exist_ok=True)
 
-        print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 32)
+        print(f"--" * 32)
 
+        output_dir = os.path.join("runs", args.experiment)
         with open(os.path.join(output_dir, args.sst_dev_out), "w+") as f:
             print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
             print(f"save {os.path.join(output_dir, args.sst_dev_out)} ...")
@@ -344,7 +345,7 @@ def test_model_multitask(args, model, device):
             for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 16)
+        print(f"--" * 32)
 
         with open(os.path.join(output_dir, args.para_dev_out), "w+") as f:
             print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
@@ -359,7 +360,7 @@ def test_model_multitask(args, model, device):
             for p, s in zip(test_para_sent_ids, test_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 16)
+        print(f"--" * 32)
 
         with open(os.path.join(output_dir, args.sts_dev_out), "w+") as f:
             print(f"dev sts corr :: {dev_sts_corr :.3f}")
