@@ -103,7 +103,7 @@ def train_multitask(args):
 
     if (args.scheduler == "ReduceLROnPlateau"):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',
-                                                               patience=1,
+                                                               patience=0,
                                                                min_lr=1e-7,
                                                                cooldown=1,
                                                                factor=0.5,

@@ -65,13 +65,20 @@ class MultitaskBERT(ReptileModelBase):
         # sentiment
         self.sentiment_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_output_proj = torch.nn.Linear(config.hidden_size, 5)
+        torch.nn.init.xavier_normal_(self.sentiment_output_proj.weight)
+        torch.nn.init.zeros_(self.sentiment_output_proj.bias)
 
         # paraphrase
         self.paraphrase_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
         self.paraphrase_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
         self.paraphrase_nl = F.gelu
         self.paraphrase_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
-                
+
+        torch.nn.init.kaiming_normal_(self.paraphrase_output_proj1.weight, mode='fan_in', nonlinearity='relu')        
+        torch.nn.init.zeros_(self.paraphrase_output_proj1.bias)
+        torch.nn.init.xavier_normal_(self.paraphrase_output_proj2.weight)
+        torch.nn.init.zeros_(self.paraphrase_output_proj2.bias)
+
         # similarity, sts
         #self.similarity_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
         #self.similarity_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
@@ -82,6 +89,9 @@ class MultitaskBERT(ReptileModelBase):
         #     self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 6)
         
         self.similarity_output_proj_cosine = torch.nn.Linear(config.hidden_size, config.hidden_size//2)
+        torch.nn.init.xavier_normal_(self.similarity_output_proj_cosine.weight)
+        torch.nn.init.zeros_(self.similarity_output_proj_cosine.bias)
+
 
     def call_backbone(self, input_ids, attention_mask):
         res = self.bert(input_ids, attention_mask)
