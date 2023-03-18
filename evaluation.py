@@ -326,37 +326,50 @@ def test_model_multitask(args, model, device):
                                           sts_test_dataloader, model, device, args)
 
         os.makedirs(args.experiment, exist_ok=True)
-        os.makedirs(os.path.join(args.experiment, "predictions"), exist_ok=True)
-        
-        with open(os.path.join(args.experiment, args.sst_dev_out), "w+") as f:
+        output_dir = os.path.join(args.experiment, "predictions")
+        os.makedirs(output_dir, exist_ok=True)
+
+        print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 32)
+
+        with open(os.path.join(output_dir, args.sst_dev_out), "w+") as f:
             print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
+            print(f"save {os.path.join(output_dir, args.sst_dev_out)} ...")
             f.write(f"id \t Predicted_Sentiment \n")
             for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(os.path.join(args.experiment, args.sst_test_out), "w+") as f:
+        with open(os.path.join(output_dir, args.sst_test_out), "w+") as f:
             f.write(f"id \t Predicted_Sentiment \n")
+            print(f"save {os.path.join(output_dir, args.sst_test_out)} ...")
             for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(os.path.join(args.experiment, args.para_dev_out), "w+") as f:
+        print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 16)
+
+        with open(os.path.join(output_dir, args.para_dev_out), "w+") as f:
             print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
+            print(f"save {os.path.join(output_dir, args.para_dev_out)} ...")
             f.write(f"id \t Predicted_Is_Paraphrase \n")
             for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(os.path.join(args.experiment, args.para_test_out), "w+") as f:
+        with open(os.path.join(output_dir, args.para_test_out), "w+") as f:
             f.write(f"id \t Predicted_Is_Paraphrase \n")
+            print(f"save {os.path.join(output_dir, args.para_test_out)} ...")
             for p, s in zip(test_para_sent_ids, test_para_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(os.path.join(args.experiment, args.sts_dev_out), "w+") as f:
+        print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 16)
+
+        with open(os.path.join(output_dir, args.sts_dev_out), "w+") as f:
             print(f"dev sts corr :: {dev_sts_corr :.3f}")
+            print(f"save {os.path.join(output_dir, args.sts_dev_out)} ...")
             f.write(f"id \t Predicted_Similiary \n")
             for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
                 f.write(f"{p} , {s} \n")
 
-        with open(os.path.join(args.experiment, args.sts_test_out), "w+") as f:
+        with open(os.path.join(output_dir, args.sts_test_out), "w+") as f:
             f.write(f"id \t Predicted_Similiary \n")
+            print(f"save {os.path.join(output_dir, args.sts_test_out)} ...")
             for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                 f.write(f"{p} , {s} \n")

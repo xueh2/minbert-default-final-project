@@ -92,7 +92,7 @@ def do_learning_sts(model, optimizer, iter_sts, sts_train_dataloader, device, ar
 
     loss_all = []
 
-    mse_loss = nn.MSELoss(reduction='sum')
+    mse_loss = nn.MSELoss(reduction='mean')
     l1_loss = nn.L1Loss(reduction='sum')
     kl_loss = nn.KLDivLoss(reduction="sum")
     
@@ -117,11 +117,11 @@ def do_learning_sts(model, optimizer, iter_sts, sts_train_dataloader, device, ar
                 with torch.cuda.amp.autocast():
                     sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
                     #loss = l1_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
-                    loss = mse_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size
+                    loss = mse_loss(sts_logits, sts_labels)
             else:
                 sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
                 #loss = l1_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
-                loss = mse_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size
+                loss = mse_loss(sts_logits, sts_labels)
         else:
             if(args.use_amp):
                 with torch.cuda.amp.autocast():
@@ -403,6 +403,10 @@ def train_multitask_reptile(args):
            
         curr_lr = meta_scheduler.optimizer.param_groups[0]['lr']
            
+        if args.lr>1e-7 and meta_iteration>0 and meta_iteration % args.StepLR_step_size == 0:
+            args.lr *= 0.8
+            state['param_groups'][0]['lr'] = args.lr
+
         # ---------------------------------------------------------------------
         # set the loop
         loop.update(1)
@@ -566,6 +570,8 @@ def get_args_reptile(parser = argparse.ArgumentParser("multi-task-reptile")):
 
 if __name__ == "__main__":
     
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
+
     colorama_init()
     
     parser = get_args_reptile(parser = argparse.ArgumentParser("multi-task-reptile"))
@@ -576,10 +582,15 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("runs", args.experiment), exist_ok=True)
     args.filepath = os.path.join("runs", args.experiment, f'{args.option}-{args.epochs}-{args.lr}-{args.experiment}-reptile-{moment}.pt') # save path
     
+    print(args)
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 16)
+
     if(args.wandb):
         wandb.init(project="CS224", group=args.experiment, config=args, tags=moment)
         wandb.watch_called = False
-            
+
     #seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask_reptile(args)
+    print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 32)
     test_model(args)
+    print(f"{Fore.GREEN}--{Style.RESET_ALL}" * 32)

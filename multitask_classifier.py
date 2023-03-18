@@ -61,7 +61,7 @@ def train_multitask(args):
     best_dev_acc = 0
 
     bce_logit_loss = nn.BCEWithLogitsLoss(reduction='sum')
-    mse_loss = nn.MSELoss(reduction='sum')
+    mse_loss = nn.MSELoss(reduction='mean')
     l1_loss = nn.L1Loss(reduction='sum')
     kl_loss = nn.KLDivLoss(reduction="sum")
 
@@ -245,12 +245,13 @@ def train_multitask(args):
                     if(args.use_amp):
                         with torch.cuda.amp.autocast():
                             sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
-                            sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                            #sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                            sts_loss = mse_loss(sts_logits, sts_labels[:, None])
                     else:
                         sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
                         #sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
                         # only mse give best results
-                        sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size
+                        sts_loss = mse_loss(sts_logits, sts_labels[:, None])
                 else:
                     if(args.use_amp):
                         with torch.cuda.amp.autocast():
@@ -336,12 +337,17 @@ def train_multitask(args):
                 wandb.log({"epoch_lr": epoch_lr})
         # --------------------------------------------------------------------
         # validation
-        para_train_accuracy, para_y_pred, para_sent_ids, \
-            sst_train_accuracy,sst_y_pred, sst_sent_ids, \
-            sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
-                                                                        para_train_dataloader,
-                                                                        sts_train_dataloader,
-                                                                        model, device, args)
+        para_train_accuracy = 0
+        sst_train_accuracy = 0
+        sts_train_corr = 0
+
+        if args.without_train_for_evaluation is False:
+            para_train_accuracy, para_y_pred, para_sent_ids, \
+                sst_train_accuracy,sst_y_pred, sst_sent_ids, \
+                sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
+                                                                            para_train_dataloader,
+                                                                            sts_train_dataloader,
+                                                                            model, device, args)
             
         para_dev_accuracy, para_y_pred, para_sent_ids, \
             sst_dev_accuracy,sst_y_pred, sst_sent_ids, \
@@ -415,6 +421,8 @@ def train_multitask(args):
 
 if __name__ == "__main__":
     
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)
+
     colorama_init()
     
     parser = get_args()
@@ -425,6 +433,9 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("runs", args.experiment), exist_ok=True)
     args.filepath = os.path.join("runs", args.experiment, f'{args.option}-{args.epochs}-{args.lr}-{args.experiment}-{moment}.pt') # save path
     
+    print(args)
+    print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 16)
+
     if(args.wandb):
         wandb.init(project="CS224", group=args.experiment, config=args, tags=moment)
         wandb.watch_called = False
