@@ -73,14 +73,16 @@ class MultitaskBERT(ReptileModelBase):
         self.paraphrase_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
                 
         # similarity, sts
-        self.similarity_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
-        self.similarity_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.similarity_nl = F.gelu
-        if config.sts_train_method == "regression":
-            self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
-        else:
-            self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 6)
+        #self.similarity_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
+        #self.similarity_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
+        #self.similarity_nl = F.gelu
+        # if config.sts_train_method == "regression":
+        #     self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
+        # else:
+        #     self.similarity_output_proj2 = torch.nn.Linear(config.hidden_size, 6)
         
+        self.similarity_output_proj_cosine = torch.nn.Linear(config.hidden_size, config.hidden_size//2)
+
     def call_backbone(self, input_ids, attention_mask):
         res = self.bert(input_ids, attention_mask)
         
@@ -150,14 +152,39 @@ class MultitaskBERT(ReptileModelBase):
         Note that your output should be unnormalized (a logit).
         '''
         ### TODO
-        pooler_output_1, _ = self.call_backbone(input_ids_1, attention_mask_1)       
-        pooler_output_2, _ = self.call_backbone(input_ids_2, attention_mask_2)
+        # pooler_output_1, _ = self.call_backbone(input_ids_1, attention_mask_1)       
+        # pooler_output_2, _ = self.call_backbone(input_ids_2, attention_mask_2)
         
-        x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
-        x = self.similarity_output_proj1(self.similarity_drop_out(x))
-        logits = self.similarity_output_proj2(self.similarity_nl(x))
+        # x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
+        # x = self.similarity_output_proj1(self.similarity_drop_out(x))
+        # logits = self.similarity_output_proj2(self.similarity_nl(x))
+        # return logits
+
+        # pooler_output_1, seq_output_1 = self.call_backbone(input_ids_1, attention_mask_1)       
+        # pooler_output_2, seq_output_2 = self.call_backbone(input_ids_2, attention_mask_2)
+        
+        # s1 = torch.mean(seq_output_1, dim=1)
+        # s2 = torch.mean(seq_output_2, dim=1)
+
+        # x = torch.concat((s1, s2), dim=1)
+        # #x = self.similarity_output_proj1(self.similarity_drop_out(x))
+        # x = self.similarity_output_proj1(x)
+        # logits = self.similarity_output_proj2(self.similarity_nl(x))
+        
+        pooler_output_1, seq_output_1 = self.call_backbone(input_ids_1, attention_mask_1)       
+        pooler_output_2, seq_output_2 = self.call_backbone(input_ids_2, attention_mask_2)
+        
+        s1 = self.similarity_output_proj_cosine(torch.mean(seq_output_1, dim=1))
+        s2 = self.similarity_output_proj_cosine(torch.mean(seq_output_2, dim=1))
+        
+        # s1 = torch.mean(seq_output_1, dim=1)
+        # s2 = torch.mean(seq_output_2, dim=1)
+        
+        logits = 5 * F.relu(torch.nn.functional.cosine_similarity(s1, s2, dim=1))
+
         return logits
 
+                
     def clone(self):
         clone = MultitaskBERT(self.config)
         clone.load_state_dict(self.state_dict())

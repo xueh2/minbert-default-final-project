@@ -116,10 +116,12 @@ def do_learning_sts(model, optimizer, iter_sts, sts_train_dataloader, device, ar
             if(args.use_amp):
                 with torch.cuda.amp.autocast():
                     sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
-                    loss = l1_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                    #loss = l1_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                    loss = mse_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size
             else:
                 sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
-                loss = l1_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                #loss = l1_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                loss = mse_loss(sts_logits, sts_labels[:, None]) / args.sts_batch_size
         else:
             if(args.use_amp):
                 with torch.cuda.amp.autocast():
@@ -351,10 +353,14 @@ def train_multitask_reptile(args):
     step_para = 0
     step_sst = 0
     step_sts = 0
-    
+
+    probs = np.array([args.task_sample_prob_para, args.task_sample_prob_sst, args.task_sample_prob_sts])
+    probs /= np.sum(probs)
+
     iter_inds = np.random.permutation(np.arange(args.meta_iter))
 
-    for meta_iteration, task_ind in enumerate(iter_inds):
+    #for meta_iteration, task_ind in enumerate(iter_inds):
+    for meta_iteration in range(args.meta_iter):
                
         meta_lr = args.meta_lr * (1. - meta_iteration/float(args.meta_iter))
         #set_learning_rate(meta_optimizer, meta_lr)
@@ -362,7 +368,8 @@ def train_multitask_reptile(args):
         # create inner model
         inner_model = model.clone()
         
-        #task_ind = np.random.randint(0, 3)
+        task_ind = np.random.choice(3, 1, p=probs)
+
         if task_ind%3 == 0:
             task_str = "para"
         elif task_ind%3 == 1:
@@ -400,7 +407,7 @@ def train_multitask_reptile(args):
         # set the loop
         loop.update(1)
         
-        loop.set_postfix_str(f"{Fore.GREEN} meta_lr {curr_lr:g}, inner_lr {inner_lr:g}, {Fore.YELLOW} meta_iter {meta_iteration}, {task_str}, {para_print_start} para : {para_train_loss.avg:.4f}, {sst_print_start} sst : {sst_train_loss.avg:.4f}, {sts_print_start} sts : {sts_train_loss.avg:.4f}")
+        loop.set_postfix_str(f"{Fore.GREEN} meta_lr {curr_lr:g}, inner_lr {inner_lr:g}, {Fore.YELLOW} meta_iter {meta_iteration}, {task_str}, {para_print_start} para {step_para}: {para_train_loss.avg:.4f}, {sst_print_start} sst {step_sst}: {sst_train_loss.avg:.4f}, {sts_print_start} sts {step_sts}: {sts_train_loss.avg:.4f}")
             
         # ---------------------------------------------------------------------
         # add summary
@@ -539,11 +546,15 @@ def get_args_reptile(parser = argparse.ArgumentParser("multi-task-reptile")):
     
     parser.add_argument("--meta_iter", type=int, default=30, help="number of outter meta-iteration")
     
-    parser.add_argument('--meta_lr', type=float, default=0.1, help='meta learning rate')
+    parser.add_argument('--meta_lr', type=float, default=1.0, help='meta learning rate')
     parser.add_argument('--meta_weight_decay', type=float, default=0.0, help='weight decay')
     
     parser.add_argument("--meta_validate_every", type=int, default=5, help="number of outter meta-iteration to run evaluation")
     
+    parser.add_argument('--task_sample_prob_para', type=float, default=0.0, help="sample probablity, task")
+    parser.add_argument('--task_sample_prob_sst', type=float, default=0.0, help="sample probablity, sst")
+    parser.add_argument('--task_sample_prob_sts', type=float, default=1.0, help="sample probablity, sts")
+
     # inner optimization
     parser.add_argument("--para_iter", type=int, default=10, help="number of inner meta iterations")   
     parser.add_argument("--sst_iter", type=int, default=10, help="number of inner meta iterations")    

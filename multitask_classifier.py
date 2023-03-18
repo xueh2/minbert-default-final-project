@@ -248,7 +248,9 @@ def train_multitask(args):
                             sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
                     else:
                         sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
-                        sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                        #sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                        # only mse give best results
+                        sts_loss = mse_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size
                 else:
                     if(args.use_amp):
                         with torch.cuda.amp.autocast():
