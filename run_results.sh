@@ -25,3 +25,5 @@ python3 multitask_classifier.py --option finetune --dp --use_gpu --lr ${lr} --ba
 
 # run reptile
 python3 multitask_classifier_reptile.py --option finetune --dp --use_gpu --lr 1e-5 --optimizer AdamW --scheduler StepLR --sts_train_method classification --wandb --experiment reptile --meta_iter 30 --meta_optimizer SGD --meta_scheduler CosineAnnealingLR --meta_weight_decay 0.0 --meta_validate_every 1 --para_iter 10 --sst_iter 10 --sts_iter 10
+
+python3 multitask_classifier_reptile.py --option finetune --dp --use_gpu --lr 2e-5 --optimizer AdamW --scheduler StepLR --sts_train_method regression --wandb --experiment reptile --meta_lr 0.1 --meta_iter 600 --meta_optimizer SGD  --meta_scheduler CosineAnnealingLR --meta_weight_decay 1.0 --meta_validate_every 20 --para_iter 10 --sst_iter 10 --sts_iter 10 --para_batch_size 32 --sst_batch_size 64 --sts_batch_size 64 --without_train_for_evaluation

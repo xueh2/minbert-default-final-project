@@ -10,10 +10,12 @@ def make_infinite(dataloader):
             
 # -------------------------------------------------------
 
-def do_learning_para(model, optimizer, iter_para, device, para_train_dataloader, args):
+def do_learning_para(model, optimizer, iter_para, para_train_dataloader, device, args):
 
     bce_logit_loss = nn.BCEWithLogitsLoss(reduction='sum')
     
+    loss_all = []
+
     model.train()
     for iteration in range(args.para_iter):
        
@@ -42,11 +44,15 @@ def do_learning_para(model, optimizer, iter_para, device, para_train_dataloader,
         loss.backward()
         optimizer.step()
 
-    return loss.item(), iter_para
+        loss_all.append(loss.item())
+
+    return loss_all, iter_para
 
 # -------------------------------------------------------
 
-def do_learning_sst(model, optimizer, iter_sst, device, sst_train_dataloader, args):
+def do_learning_sst(model, optimizer, iter_sst, sst_train_dataloader, device, args):
+
+    loss_all = []
 
     model.train()
     for iteration in range(args.sst_iter):
@@ -76,11 +82,15 @@ def do_learning_sst(model, optimizer, iter_sst, device, sst_train_dataloader, ar
         loss.backward()
         optimizer.step()
         
-    return loss.item(), iter_sst
+        loss_all.append(loss.item())
+
+    return loss_all, iter_sst
     
 # -------------------------------------------------------
 
-def do_learning_sts(model, optimizer, iter_sts, device, sts_train_dataloader, args):
+def do_learning_sts(model, optimizer, iter_sts, sts_train_dataloader, device, args):
+
+    loss_all = []
 
     mse_loss = nn.MSELoss(reduction='sum')
     l1_loss = nn.L1Loss(reduction='sum')
@@ -129,7 +139,9 @@ def do_learning_sts(model, optimizer, iter_sts, device, sts_train_dataloader, ar
         loss.backward()
         optimizer.step()
         
-    return loss.item(), iter_sts
+        loss_all.append(loss.item())
+
+    return loss_all, iter_sts
 
 # -------------------------------------------------------
 
@@ -172,7 +184,7 @@ def get_inner_optimizer(model, args, task_str, state=None):
         
     if (args.scheduler == "StepLR"):
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.StepLR_step_size, 
-                                                    gamma=0.8, last_epoch=-1, verbose=True)
+                                                    gamma=0.8, last_epoch=-1, verbose=False)
         scheduler_on_batch = False
         
     if (args.scheduler == "CosineAnnealingLR"):
@@ -249,7 +261,7 @@ def get_meta_optimizer(model, args, state=None):
         
     if (args.meta_scheduler == "CosineAnnealingLR"):
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.meta_iter,
-                                                               eta_min=1e-6, last_epoch=-1)
+                                                               eta_min=1e-6, last_epoch=-1, verbose=False)
 
         scheduler_on_batch = False
         
@@ -271,6 +283,10 @@ def train_multitask_reptile(args):
     para_train_data, para_dev_data, para_train_dataloader, para_dev_dataloader, \
     sts_train_data, sts_dev_data, sts_train_dataloader, sts_dev_dataloader = train_multitask_base(args)    
     
+    para_val_train_dataloader, para_dev_dataloader = create_para_data_loader(para_train_data, para_dev_data, args)
+    sst_val_train_dataloader, sst_dev_dataloader = create_sst_data_loader(sst_train_data, sst_dev_data, args)
+    sts_val_train_dataloader, sts_dev_dataloader = create_sts_data_loader(sts_train_data, sts_dev_data, args)
+
     # -------------------------------------------------------
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -336,7 +352,9 @@ def train_multitask_reptile(args):
     step_sst = 0
     step_sts = 0
     
-    for meta_iteration in range(args.meta_iter):
+    iter_inds = np.random.permutation(np.arange(args.meta_iter))
+
+    for meta_iteration, task_ind in enumerate(iter_inds):
                
         meta_lr = args.meta_lr * (1. - meta_iteration/float(args.meta_iter))
         #set_learning_rate(meta_optimizer, meta_lr)
@@ -344,29 +362,31 @@ def train_multitask_reptile(args):
         # create inner model
         inner_model = model.clone()
         
-        task_ind = np.random.randint(0, 4)
-        if task_ind == 0:
+        #task_ind = np.random.randint(0, 3)
+        if task_ind%3 == 0:
             task_str = "para"
-        elif task_ind == 1:
+        elif task_ind%3 == 1:
             task_str = "sst"
-        elif task_ind == 2:
+        elif task_ind%3 == 2:
             task_str = "sts"
             
         optimizer, scheduler = get_inner_optimizer(inner_model, args, task_str, state)
                    
         if task_str == "para": 
             loss, iter_para = do_learning_para(inner_model, optimizer, iter_para, para_train_dataloader, device, args)
-            para_train_loss.update(loss, 1)
+            para_train_loss.update_list(loss, 1)
             step_para += 1
         elif task_str == "sst":
             loss, iter_sst = do_learning_sst(inner_model, optimizer, iter_sst, sst_train_dataloader, device, args)
-            sst_train_loss.update(loss, 1)
+            sst_train_loss.update_list(loss, 1)
             step_sst += 1
         elif task_str == "sts":
-            loss, iter_sts = do_learning_sst(inner_model, optimizer, iter_sts, sts_train_dataloader, device, args)
-            sts_train_loss.update(loss, 1)
+            loss, iter_sts = do_learning_sts(inner_model, optimizer, iter_sts, sts_train_dataloader, device, args)
+            sts_train_loss.update_list(loss, 1)
             step_sts += 1
         
+        inner_lr = optimizer.param_groups[0]['lr']
+
         state = optimizer.state_dict()
         
         model.point_grad_to(inner_model)
@@ -380,10 +400,7 @@ def train_multitask_reptile(args):
         # set the loop
         loop.update(1)
         
-        loop.set_postfix_str(f"{Fore.GREEN} lr {curr_lr:g}, {Fore.YELLOW} meta_iter {meta_iteration}, \
-            {para_print_start} para : {para_train_loss.avg:.4f}, \
-                {sst_print_start} sst : {sst_train_loss.avg:.4f}, \
-                    {sts_print_start} sts : {sts_train_loss.avg:.4f}")
+        loop.set_postfix_str(f"{Fore.GREEN} meta_lr {curr_lr:g}, inner_lr {inner_lr:g}, {Fore.YELLOW} meta_iter {meta_iteration}, {task_str}, {para_print_start} para : {para_train_loss.avg:.4f}, {sst_print_start} sst : {sst_train_loss.avg:.4f}, {sts_print_start} sts : {sts_train_loss.avg:.4f}")
             
         # ---------------------------------------------------------------------
         # add summary
@@ -414,14 +431,19 @@ def train_multitask_reptile(args):
             
         # ------------------------------------------------------------------------------------------------------------
         # validation
-        if meta_iteration % args.meta_validate_every == 0:
+        if (meta_iteration % args.meta_validate_every == 0) or (meta_iteration == args.meta_iter-1):
             
-            para_train_accuracy, para_y_pred, para_sent_ids, \
-                sst_train_accuracy,sst_y_pred, sst_sent_ids, \
-                sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_train_dataloader,
-                                                                            para_train_dataloader,
-                                                                            sts_train_dataloader,
-                                                                            model, device, args)
+            para_train_accuracy = 0
+            sst_train_accuracy = 0
+            sts_train_corr = 0
+
+            if args.without_train_for_evaluation is False:
+                para_train_accuracy, para_y_pred, para_sent_ids, \
+                    sst_train_accuracy,sst_y_pred, sst_sent_ids, \
+                    sts_train_corr, sts_y_pred, sts_sent_ids = model_eval_multitask(sst_val_train_dataloader,
+                                                                                para_val_train_dataloader,
+                                                                                sts_val_train_dataloader,
+                                                                                model, device, args)
                 
             para_dev_accuracy, para_y_pred, para_sent_ids, \
                 sst_dev_accuracy,sst_y_pred, sst_sent_ids, \
@@ -453,35 +475,42 @@ def train_multitask_reptile(args):
             
             print(f"{Fore.YELLOW}Step {meta_iteration}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, train acc :: {sst_train_accuracy :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
             if args.wandb:
-                wandb.define_metric("sst/train_accuracy", step_metric='sst/step')
+                if args.without_train_for_evaluation is False:
+                    wandb.define_metric("sst/train_accuracy", step_metric='sst/step')                    
+                    wandb.log({"sst/train_accuracy": sst_train_accuracy, "sst/dev_accuracy":sst_dev_accuracy})                    
+                    wandb.define_metric("sst_train_accuracy", step_metric='step')
+                    wandb.log({"sst_train_accuracy": sst_train_accuracy})
+
                 wandb.define_metric("sst/dev_accuracy", step_metric='sst/step')
-                wandb.log({"sst/train_accuracy": sst_train_accuracy, "sst/dev_accuracy":sst_dev_accuracy})
-                
-                wandb.define_metric("sst_train_accuracy", step_metric='step')
-                wandb.log({"sst_train_accuracy": sst_train_accuracy})
+                wandb.log({"sst/dev_accuracy":sst_dev_accuracy})
                 wandb.define_metric("sst_dev_accuracy", step_metric='step')
                 wandb.log({"sst_dev_accuracy": sst_dev_accuracy})
-            
+        
             print(f"{Fore.YELLOW}Step {meta_iteration}: {para_print_start} paraphrase analysis, train loss :: {para_train_loss.avg :.3f}, train acc :: {para_train_accuracy :.3f}, dev acc :: {para_dev_accuracy :.3f}{Style.RESET_ALL}")
             if args.wandb:
-                wandb.define_metric("para/train_accuracy", step_metric='para/step')
+                if args.without_train_for_evaluation is False:
+                    wandb.define_metric("para/train_accuracy", step_metric='para/step')                    
+                    wandb.log({"para/train_accuracy": para_train_accuracy, "para/dev_accuracy":para_dev_accuracy})                    
+                    wandb.define_metric("para_train_accuracy", step_metric='step')
+                    wandb.log({"para_train_accuracy": para_train_accuracy})
+
                 wandb.define_metric("para/dev_accuracy", step_metric='para/step')
-                wandb.log({"para/train_accuracy": para_train_accuracy, "para/dev_accuracy":para_dev_accuracy})
-                
-                wandb.define_metric("para_train_accuracy", step_metric='step')
-                wandb.log({"para_train_accuracy": para_train_accuracy})
+                wandb.log({"para/dev_accuracy":para_dev_accuracy})
                 wandb.define_metric("para_dev_accuracy", step_metric='step')
                 wandb.log({"para_dev_accuracy": para_dev_accuracy})
-                
+
             print(f"{Fore.YELLOW}Step {meta_iteration}: {sts_print_start} sentence similarity analysis, train loss :: {sts_train_loss.avg :.3f}, train corr :: {sts_train_corr :.3f}, dev corr :: {sts_dev_corr :.3f}{Style.RESET_ALL}")
             if args.wandb:
-                wandb.define_metric("sts/*", step_metric='sts/step')
-                wandb.log({"sts/train_corr": sts_train_corr, "sts/dev_corr":sts_dev_corr})
-                
-                wandb.define_metric("sts_train_corr", step_metric='step')
-                wandb.log({"sts_train_corr": sts_train_corr})
-                wandb.define_metric("sts_dev_corr", step_metric='step')
-                wandb.log({"sts_dev_corr": sts_dev_corr})
+                if args.without_train_for_evaluation is False:
+                    wandb.define_metric("sts/train_accuracy", step_metric='sts/step')                    
+                    wandb.log({"sts/train_accuracy": sts_train_corr, "sts/dev_accuracy":sts_dev_corr})                    
+                    wandb.define_metric("sts_train_accuracy", step_metric='step')
+                    wandb.log({"sts_train_accuracy": sts_train_corr})
+
+                wandb.define_metric("sts/dev_accuracy", step_metric='sts/step')
+                wandb.log({"sts/dev_accuracy":sts_dev_corr})
+                wandb.define_metric("sts_dev_accuracy", step_metric='step')
+                wandb.log({"sts_dev_accuracy": sts_dev_corr})
                 
     print(f"{Fore.YELLOW}--{Style.RESET_ALL}" * 32)    
 

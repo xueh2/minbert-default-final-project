@@ -63,17 +63,18 @@
                 "--lr", "1e-5", 
                 "--optimizer", "AdamW",
                 "--scheduler", "StepLR", 
-                "--sts_train_method", "classification",
+                "--sts_train_method", "regression",
                 "--wandb", 
                 "--experiment", "reptile", 
-                "--meta_iter", "30",
+                "--meta_iter", "300",
                 "--meta_optimizer", "SGD",
                 "--meta_scheduler", "CosineAnnealingLR",
                 "--meta_weight_decay", "0.0",
-                "--meta_validate_every", "1",
+                "--meta_validate_every", "10",
                 "--para_iter", "10",
                 "--sst_iter", "10",
-                "--sts_iter", "10"
+                "--sts_iter", "10",
+                "--without_train_for_evaluation"
             ]
         }
     ]

@@ -207,6 +207,8 @@ def get_args(parser = argparse.ArgumentParser("multi-task")):
     parser.add_argument("--without_sst", action='store_true')
     parser.add_argument("--without_sts", action='store_true')
 
+    parser.add_argument("--without_train_for_evaluation", action='store_true')
+
     parser.add_argument("--wandb", action='store_true')
     
     # hyper parameters
