@@ -362,6 +362,8 @@ def train_multitask_reptile(args):
     #for meta_iteration, task_ind in enumerate(iter_inds):
     for meta_iteration in range(args.meta_iter):
                
+        model.train()
+        
         meta_lr = args.meta_lr * (1. - meta_iteration/float(args.meta_iter))
         #set_learning_rate(meta_optimizer, meta_lr)
          
