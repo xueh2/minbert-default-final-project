@@ -183,12 +183,12 @@ def train_multitask(args):
                 if(args.use_amp):
                     with torch.cuda.amp.autocast():
                         para_logits = model([para_token_ids_1, para_token_ids_2], [para_attention_mask_1, para_attention_mask_2], 'para')
-                        para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / args.batch_size
+                        para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / para_train_dataloader.batch_size
                 else:
                     para_logits = model([para_token_ids_1, para_token_ids_2], [para_attention_mask_1, para_attention_mask_2], 'para')                
-                    para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / args.batch_size
+                    para_loss = bce_logit_loss(para_logits, para_labels[:, None]) / para_train_dataloader.batch_size
                 
-                para_train_loss.update(para_loss.item(), args.batch_size)        
+                para_train_loss.update(para_loss.item(), para_train_dataloader.batch_size)        
             else:
                 para_loss = 0
                 
@@ -214,12 +214,12 @@ def train_multitask(args):
                 if(args.use_amp):
                     with torch.cuda.amp.autocast():
                         sst_logits = model(b_ids, b_mask, 'sst')
-                        sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                        sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / sst_train_dataloader.batch_size
                 else:
                     sst_logits = model(b_ids, b_mask, 'sst')                    
-                    sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                    sst_loss = F.cross_entropy(sst_logits, b_labels.view(-1), reduction='sum') / sst_train_dataloader.batch_size
                 
-                sst_train_loss.update(sst_loss.item(), args.batch_size)
+                sst_train_loss.update(sst_loss.item(), sst_train_dataloader.batch_size)
             else:
                 sst_loss = 0
     
@@ -245,25 +245,25 @@ def train_multitask(args):
                     if(args.use_amp):
                         with torch.cuda.amp.autocast():
                             sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
-                            sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / args.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                            sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
                     else:
                         sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
-                        sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / args.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
+                        sts_loss = l1_loss(sts_logits, sts_labels[:, None]) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_logits, sts_labels[:, None]))
                 else:
                     if(args.use_amp):
                         with torch.cuda.amp.autocast():
                             sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')
                             sts_y_hat_prob = F.log_softmax(sts_logits, dim=1)
-                            sts_loss = kl_loss(sts_y_hat_prob, sts_probs) / args.batch_size
+                            sts_loss = kl_loss(sts_y_hat_prob, sts_probs) / sts_train_dataloader.batch_size
                     else:
                         sts_logits = model([sts_token_ids_1, sts_token_ids_2], [sts_attention_mask_1, sts_attention_mask_2], 'sts')                    
                         sts_y_hat_prob = F.log_softmax(sts_logits, dim=1)
                         
                         sts_labels_y_hat = convert_logits_to_label_STS(sts_logits)
                         
-                        sts_loss = l1_loss(sts_labels_y_hat, sts_labels) / args.batch_size + (1.0 - corr_coef(sts_labels_y_hat, sts_labels)) + kl_loss(sts_y_hat_prob, sts_probs) / args.batch_size
+                        sts_loss = l1_loss(sts_labels_y_hat, sts_labels) / sts_train_dataloader.batch_size + (1.0 - corr_coef(sts_labels_y_hat, sts_labels)) + kl_loss(sts_y_hat_prob, sts_probs) / sts_train_dataloader.batch_size
                     
-                sts_train_loss.update(sts_loss.item(), args.batch_size)        
+                sts_train_loss.update(sts_loss.item(), sts_train_dataloader.batch_size)        
             else:
                 sts_loss = 0
             

@@ -6,7 +6,32 @@ from torch.utils.data import DataLoader
 
 from bert import BertModel
 
-class MultitaskBERT(nn.Module):
+"""
+This base class is borrowed from https://github.com/gabrielhuang/reptile-pytorch
+"""
+class ReptileModelBase(nn.Module):
+
+    def __init__(self):
+        super(ReptileModelBase, self).__init__()
+
+    def point_grad_to(self, target):
+        '''
+        Set .grad attribute of each parameter to be the difference between self and target
+        This is the suggestion of original reptile paper
+        '''
+        for p, target_p in zip(self.parameters(), target.parameters()):
+            if p.grad is None:
+                if self.is_cuda():
+                    p.grad = torch.zeros(p.size()).cuda()
+                else:
+                    p.grad = torch.zeros(p.size())
+            p.grad.data.zero_()
+            p.grad.data.add_(p.data - target_p.data)
+
+    def is_cuda(self):
+        return next(self.parameters()).is_cuda
+    
+class MultitaskBERT(ReptileModelBase):
     '''
     This module should use BERT for 3 tasks:
 
@@ -18,6 +43,7 @@ class MultitaskBERT(nn.Module):
         super(MultitaskBERT, self).__init__()
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
+        self.config = config
         self.bert = BertModel.from_pretrained('bert-base-uncased')
         for param in self.bert.parameters():
             if config.option == 'pretrain':
@@ -132,6 +158,12 @@ class MultitaskBERT(nn.Module):
         logits = self.similarity_output_proj2(self.similarity_nl(x))
         return logits
 
+    def clone(self):
+        clone = MultitaskBERT(self.config)
+        clone.load_state_dict(self.state_dict())
+        if self.is_cuda():
+            clone.cuda()
+        return clone
 
 if __name__ == "__main__":    
     pass

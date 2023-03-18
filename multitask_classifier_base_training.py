@@ -64,6 +64,29 @@ def corr_coef(y, y_hat):
     return cost
 
 # -------------------------------------------------------
+def create_para_data_loader(para_train_data, para_dev_data, args):
+    
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.para_batch_size, collate_fn=para_train_data.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.para_batch_size, collate_fn=para_dev_data.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+        
+    return para_train_dataloader, para_dev_dataloader
+            
+            
+def create_sst_data_loader(sst_train_data, sst_dev_data, args):
+    
+    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.sst_batch_size, collate_fn=sst_train_data.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.sst_batch_size, collate_fn=sst_dev_data.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+        
+    return sst_train_dataloader, sst_dev_dataloader
+
+def create_sts_data_loader(sts_train_data, sts_dev_data, args):
+    
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.sts_batch_size, collate_fn=sts_train_data.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.sts_batch_size, collate_fn=sts_dev_data.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+        
+    return sts_train_dataloader, sts_dev_dataloader
+
+# -------------------------------------------------------
 def train_multitask_base(args):
     
     # check    
@@ -96,8 +119,7 @@ def train_multitask_base(args):
     sst_train_data = SentenceClassificationDataset(sst_train_dataset, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_dataset, args)
 
-    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sst_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
-    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sst_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
+    sst_train_dataloader, sst_dev_dataloader = create_sst_data_loader(sst_train_data, sst_dev_data, args)
 
     num_sst = len(sst_train_dataloader)
     print(f"sst train data has {num_sst} batches ...")
@@ -107,8 +129,7 @@ def train_multitask_base(args):
     para_train_data = SentencePairDataset(para_train_dataset, args, isRegression=False)
     para_dev_data = SentencePairDataset(para_dev_dataset, args, isRegression=False)
 
-    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=para_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=para_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
+    para_train_dataloader, para_dev_dataloader = create_sst_data_loader(para_train_data, para_dev_data, args)
         
     num_para = len(para_train_dataloader)
     print(f"para train data has {num_para} batches ...")
@@ -118,8 +139,7 @@ def train_multitask_base(args):
     sts_train_data = SentencePairSTSDataset(sts_train_dataset, args, isRegression=True)
     sts_dev_data = SentencePairSTSDataset(sts_dev_dataset, args, isRegression=True)
 
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size, collate_fn=sts_train_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size, collate_fn=sts_dev_data.collate_fn, num_workers=num_workers, prefetch_factor=8)
+    sts_train_dataloader, sts_dev_dataloader = create_sst_data_loader(sts_train_data, sts_dev_data, args)
     
     num_sts = len(sts_train_dataloader)
     print(f"sts train data has {num_sts} batches ...")
@@ -191,6 +211,14 @@ def get_args(parser = argparse.ArgumentParser("multi-task")):
     
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
+    
+    parser.add_argument("--para_batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
+    parser.add_argument("--sst_batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
+    parser.add_argument("--sts_batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=64)
+    
+    parser.add_argument("--num_workers", help='number of workers for loader', type=int, default=2)
+    parser.add_argument("--prefetch_factor", help='number of prefetched batches', type=int, default=4)
+    
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.1)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
