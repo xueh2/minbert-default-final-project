@@ -239,7 +239,8 @@ def get_args(parser = argparse.ArgumentParser("multi-task")):
         help='ReduceLROnPlateau, StepLR, or OneCycleLR'
     )
     
-    parser.add_argument('--StepLR_step_size', type=int, default=4, help='step size to reduce lr for SGD optimizer')
+    parser.add_argument('--StepLR_step_size', type=int, default=4, help='step size to reduce lr for StepLR scheduler')
+    parser.add_argument('--StepLR_gamma', type=float, default=0.8, help='gamma to reduce lr for StepLR scheduler')
     
     parser.add_argument(
         "--activation",

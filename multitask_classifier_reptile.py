@@ -186,7 +186,7 @@ def get_inner_optimizer(model, args, task_str, state=None):
         
     if (args.scheduler == "StepLR"):
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.StepLR_step_size, 
-                                                    gamma=0.8, last_epoch=-1, verbose=False)
+                                                    gamma=args.StepLR_gamma, last_epoch=-1, verbose=False)
         scheduler_on_batch = False
         
     if (args.scheduler == "CosineAnnealingLR"):
@@ -404,7 +404,7 @@ def train_multitask_reptile(args):
         curr_lr = meta_scheduler.optimizer.param_groups[0]['lr']
            
         if args.lr>1e-7 and meta_iteration>0 and meta_iteration % args.StepLR_step_size == 0:
-            args.lr *= 0.8
+            args.lr *= args.StepLR_gamma
             state['param_groups'][0]['lr'] = args.lr
 
         # ---------------------------------------------------------------------

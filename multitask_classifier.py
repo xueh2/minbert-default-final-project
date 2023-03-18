@@ -111,7 +111,7 @@ def train_multitask(args):
         scheduler_on_batch = False
         
     if (args.scheduler == "StepLR"):
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.StepLR_step_size, gamma=0.8, last_epoch=-1, verbose=True)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.StepLR_step_size, gamma=args.StepLR_gamma, last_epoch=-1, verbose=True)
         scheduler_on_batch = False
 
     if (args.scheduler == "OneCycleLR"):
