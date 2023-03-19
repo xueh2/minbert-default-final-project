@@ -159,8 +159,8 @@ def get_inner_optimizer(model, args, task_str, state=None):
                                weight_decay=args.weight_decay, amsgrad=Adam_amsgrad)
 
     if (args.optimizer  == "AdamW"):
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
-                                weight_decay=args.weight_decay, amsgrad=AdamW_amsgrad)
+        #optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay, amsgrad=AdamW_amsgrad)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0, 0.999), eps=1e-08, weight_decay=args.weight_decay, amsgrad=AdamW_amsgrad)
 
     if (args.optimizer  == "SGD"):
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay,
@@ -344,7 +344,9 @@ def train_multitask_reptile(args):
     iter_sst = iter(sst_train_dataloader)
     iter_sts = iter(sts_train_dataloader)
                 
-    state = None
+    state_para = None
+    state_sst = None
+    state_sts = None
     
     # --------------------------------------------------------    
     # Run for the specified number of meta iterations
@@ -363,7 +365,7 @@ def train_multitask_reptile(args):
     for meta_iteration in range(args.meta_iter):
                
         model.train()
-        
+
         meta_lr = args.meta_lr * (1. - meta_iteration/float(args.meta_iter))
         #set_learning_rate(meta_optimizer, meta_lr)
          
@@ -379,7 +381,12 @@ def train_multitask_reptile(args):
         elif task_ind%3 == 2:
             task_str = "sts"
             
-        optimizer, scheduler = get_inner_optimizer(inner_model, args, task_str, state)
+        if task_str == "para":
+            optimizer, scheduler = get_inner_optimizer(inner_model, args, task_str, state=state_para)
+        if task_str == "sst":
+            optimizer, scheduler = get_inner_optimizer(inner_model, args, task_str, state=state_sst)
+        if task_str == "sts":
+            optimizer, scheduler = get_inner_optimizer(inner_model, args, task_str, state=state_sts)
                    
         if task_str == "para": 
             loss, iter_para = do_learning_para(inner_model, optimizer, iter_para, para_train_dataloader, device, args)
@@ -396,7 +403,12 @@ def train_multitask_reptile(args):
         
         inner_lr = optimizer.param_groups[0]['lr']
 
-        state = optimizer.state_dict()
+        if task_str == "para":
+            state_para = optimizer.state_dict()
+        if task_str == "sst":
+            state_sst = optimizer.state_dict()
+        if task_str == "sts":
+            state_sts = optimizer.state_dict()
         
         model.point_grad_to(inner_model)
         meta_optimizer.step()
@@ -407,7 +419,12 @@ def train_multitask_reptile(args):
            
         if args.lr>1e-7 and meta_iteration>0 and meta_iteration % args.StepLR_step_size == 0:
             args.lr *= args.StepLR_gamma
-            state['param_groups'][0]['lr'] = args.lr
+            if task_str == "para":
+                state_para['param_groups'][0]['lr'] = args.lr
+            if task_str == "sst":
+                state_sst['param_groups'][0]['lr'] = args.lr
+            if task_str == "sts":
+                state_sts['param_groups'][0]['lr'] = args.lr
 
         # ---------------------------------------------------------------------
         # set the loop
