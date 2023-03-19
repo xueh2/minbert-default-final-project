@@ -64,9 +64,13 @@ class MultitaskBERT(ReptileModelBase):
     
         # sentiment
         self.sentiment_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
-        self.sentiment_output_proj = torch.nn.Linear(config.hidden_size, 5)
-        torch.nn.init.xavier_normal_(self.sentiment_output_proj.weight)
-        torch.nn.init.zeros_(self.sentiment_output_proj.bias)
+        self.sentiment_output_proj1 = torch.nn.Linear(config.hidden_size, config.hidden_size//2)
+        torch.nn.init.kaiming_normal_(self.sentiment_output_proj1.weight, mode='fan_in', nonlinearity='relu')
+        torch.nn.init.zeros_(self.sentiment_output_proj1.bias)
+
+        self.sentiment_output_proj2 = torch.nn.Linear(config.hidden_size//2, 5)
+        torch.nn.init.xavier_normal_(self.sentiment_output_proj2.weight)
+        torch.nn.init.zeros_(self.sentiment_output_proj2.bias)
 
         # paraphrase
         self.paraphrase_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
@@ -143,7 +147,8 @@ class MultitaskBERT(ReptileModelBase):
         
         #logits = self.sentiment_output_proj(self.sentiment_drop_out(pooler_output))
 
-        logits = self.sentiment_output_proj(F.relu(torch.mean(last_hidden_state, dim=1)))
+        x = self.sentiment_output_proj1(torch.mean(last_hidden_state, dim=1))
+        logits = self.sentiment_output_proj2(F.gelu(x))
 
         return logits
 
