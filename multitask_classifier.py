@@ -330,7 +330,7 @@ def train_multitask(args):
                 scheduler.step()
                 
             epoch_lr = scheduler.optimizer.param_groups[0]['lr']
-            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {epoch_loss:.4f}, current learning rate is {epoch_lr}{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {Fore.RED}{epoch_loss:.4f}{Fore.YELLOW}, current learning rate is {epoch_lr}{Style.RESET_ALL}")
                         
             if args.wandb:
                 wandb.define_metric("epoch_lr", step_metric='epoch')

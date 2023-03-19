@@ -70,7 +70,7 @@ class MultitaskBERT(ReptileModelBase):
 
         # paraphrase
         self.paraphrase_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
-        self.paraphrase_output_proj1 = torch.nn.Linear(2*config.hidden_size, config.hidden_size)
+        self.paraphrase_output_proj1 = torch.nn.Linear(config.hidden_size, config.hidden_size)
         self.paraphrase_nl = F.gelu
         self.paraphrase_output_proj2 = torch.nn.Linear(config.hidden_size, 1)
 
@@ -78,6 +78,10 @@ class MultitaskBERT(ReptileModelBase):
         torch.nn.init.zeros_(self.paraphrase_output_proj1.bias)
         torch.nn.init.xavier_normal_(self.paraphrase_output_proj2.weight)
         torch.nn.init.zeros_(self.paraphrase_output_proj2.bias)
+
+        self.paraphrase_proj= torch.nn.Linear(config.hidden_size, config.hidden_size//2)
+        torch.nn.init.xavier_normal_(self.paraphrase_proj.weight)
+        torch.nn.init.zeros_(self.paraphrase_proj.bias)
 
         # similarity, sts
         #self.similarity_drop_out = torch.nn.Dropout(config.hidden_dropout_prob)
@@ -136,7 +140,11 @@ class MultitaskBERT(ReptileModelBase):
         '''
         ### TODO
         pooler_output, last_hidden_state = self.call_backbone(input_ids, attention_mask)
-        logits = self.sentiment_output_proj(self.sentiment_drop_out(pooler_output))
+        
+        #logits = self.sentiment_output_proj(self.sentiment_drop_out(pooler_output))
+
+        logits = self.sentiment_output_proj(F.relu(torch.mean(last_hidden_state, dim=1)))
+
         return logits
 
     def predict_paraphrase(self,
@@ -147,12 +155,19 @@ class MultitaskBERT(ReptileModelBase):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        pooler_output_1, _ = self.call_backbone(input_ids_1, attention_mask_1)       
-        pooler_output_2, _ = self.call_backbone(input_ids_2, attention_mask_2)
+        pooler_output_1, seq_output_1 = self.call_backbone(input_ids_1, attention_mask_1)       
+        pooler_output_2, seq_output_2 = self.call_backbone(input_ids_2, attention_mask_2)
         
-        x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
-        x = self.paraphrase_output_proj1(self.paraphrase_drop_out(x))
+        #x = torch.concat((pooler_output_1, pooler_output_2), dim=1)
+        #x = self.paraphrase_output_proj1(self.paraphrase_drop_out(x))
+        #logits = self.paraphrase_output_proj2(self.paraphrase_nl(x))
+
+        s1 = self.paraphrase_proj(torch.mean(seq_output_1, dim=1))
+        s2 = self.paraphrase_proj(torch.mean(seq_output_2, dim=1))
+        x = torch.concat((s1, s2), dim=1)
+        x = self.paraphrase_output_proj1(x)
         logits = self.paraphrase_output_proj2(self.paraphrase_nl(x))
+
         return logits
 
     def predict_similarity(self,

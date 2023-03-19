@@ -3,7 +3,7 @@
 # multi-task
 
 export lr=2e-5
-export epochs=10
+export epochs=20
 export batch_size=256
 export optimizer=AdamW
 export scheduler=ReduceLROnPlateau

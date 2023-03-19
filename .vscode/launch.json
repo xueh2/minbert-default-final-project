@@ -38,14 +38,16 @@
                 "--dp", 
                 "--use_gpu", 
                 "--lr", "1e-5", 
-                "--batch_size", "16", 
+                "--batch_size", "64", 
                 "--epochs", "20",
                 "--optimizer", "AdamW",
                 "--scheduler", "ReduceLROnPlateau", 
                 "--sts_train_method", "classification",
                 "--wandb", 
-                "--experiment", "only_sts", 
-                "--num_steps", "min"
+                "--experiment", "only_sst", 
+                "--num_steps", "mean",
+                "--without_para", "--without_sts",
+                "--without_train_for_evaluation"
             ]
         }
         ,
@@ -75,7 +77,10 @@
                 "--para_iter", "10",
                 "--sst_iter", "10",
                 "--sts_iter", "10",
-                "--without_train_for_evaluation"
+                "--without_train_for_evaluation",
+                "--task_sample_prob_para", "0.0", 
+                "--task_sample_prob_sst", "1.0", 
+                "--task_sample_prob_sts", "0.0" 
             ]
         }
     ]
