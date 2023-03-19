@@ -323,19 +323,6 @@ def train_multitask(args):
             wandb.log({"epoch_loss": epoch_loss})
                           
         # --------------------------------------------------------------------
-        if (scheduler is not None) and (scheduler_on_batch == False):
-            if(isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)):
-                scheduler.step(epoch_loss)
-            else:
-                scheduler.step()
-                
-            epoch_lr = scheduler.optimizer.param_groups[0]['lr']
-            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {Fore.RED}{epoch_loss:.4f}{Fore.YELLOW}, current learning rate is {epoch_lr}{Style.RESET_ALL}")
-                        
-            if args.wandb:
-                wandb.define_metric("epoch_lr", step_metric='epoch')
-                wandb.log({"epoch_lr": epoch_lr})
-        # --------------------------------------------------------------------
         # validation
         para_train_accuracy = 0
         sst_train_accuracy = 0
@@ -370,8 +357,23 @@ def train_multitask(args):
                 wandb.run.summary["best_model_sst_dev_accuracy"] = sst_dev_accuracy
                 wandb.run.summary["best_model_sts_dev_corr"] = sts_dev_corr
                 
-        print(f"{Fore.YELLOW}--> dev acc is {dev_acc:.4f} for epoch {epoch}.{Style.RESET_ALL}")
-        
+        print(f"{Fore.YELLOW}--> dev acc is {Fore.RED}{dev_acc:.4f}{Fore.YELLOW} for epoch {epoch}.{Style.RESET_ALL}")
+
+        # --------------------------------------------------------------------
+        if (scheduler is not None) and (scheduler_on_batch == False):
+            if(isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)):
+                scheduler.step(dev_acc)
+            else:
+                scheduler.step()
+                
+            epoch_lr = scheduler.optimizer.param_groups[0]['lr']
+            print(f"{Fore.YELLOW}for epoch {epoch}, loss is {Fore.RED}{epoch_loss:.4f}{Fore.YELLOW}, current learning rate is {epoch_lr}{Style.RESET_ALL}")
+                        
+            if args.wandb:
+                wandb.define_metric("epoch_lr", step_metric='epoch')
+                wandb.log({"epoch_lr": epoch_lr})
+
+        # --------------------------------------------------------------------                
         if args.without_sst is False:
             print(f"{Fore.YELLOW}Epoch {epoch}: {sst_print_start} sentimental analysis, train loss :: {sst_train_loss.avg :.3f}, train acc :: {sst_train_accuracy :.3f}, dev acc :: {sst_dev_accuracy :.3f}{Style.RESET_ALL}")
             if args.wandb:
