@@ -68,7 +68,7 @@
                 "--sts_train_method", "regression",
                 "--wandb", 
                 "--experiment", "reptile", 
-                "--meta_iter", "300",
+                "--meta_iter", "400",
                 "--meta_optimizer", "SGD",
                 "--meta_scheduler", "CosineAnnealingLR",
                 "--meta_weight_decay", "0.0",
@@ -77,11 +77,16 @@
                 "--para_iter", "10",
                 "--sst_iter", "10",
                 "--sts_iter", "10",
+                "--para_batch_size", "16",
+                "--sst_batch_size", "16",
+                "--sts_batch_size", "16",
                 "--without_train_for_evaluation",
-                "--task_sample_prob_para", "0.0", 
-                "--task_sample_prob_sst", "1.0", 
-                "--task_sample_prob_sts", "0.0",
-                "--percentage_data_for_train", "10.0"
+                "--task_sample_prob_para", "0.4", 
+                "--task_sample_prob_sst", "0.3", 
+                "--task_sample_prob_sts", "0.3",
+                "--StepLR_step_size", "20",
+                "--percentage_data_for_train", "10.0",
+                "--percentage_data_for_dev", "10.0"
             ]
         }
     ]

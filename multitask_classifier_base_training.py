@@ -112,7 +112,7 @@ def train_multitask_base(args):
     
     # Create the data and its corresponding datasets and dataloader
     sst_train_dataset, num_labels, para_train_dataset, sts_train_dataset = load_multitask_data(args.sst_train, args.para_train, args.sts_train, percentage_to_use=args.percentage_data_for_train, split ='train')
-    sst_dev_dataset, num_labels, para_dev_dataset, sts_dev_dataset = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, percentage_to_use=100, split ='train')
+    sst_dev_dataset, num_labels, para_dev_dataset, sts_dev_dataset = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, percentage_to_use=args.percentage_data_for_dev, split ='train')
 
     # -------------------------------------------------------
     # sst datasets
@@ -210,6 +210,7 @@ def get_args(parser = argparse.ArgumentParser("multi-task")):
     parser.add_argument("--without_train_for_evaluation", action='store_true')
 
     parser.add_argument("--percentage_data_for_train", type=float, default=100.0, help='percentage of all training data used')
+    parser.add_argument("--percentage_data_for_dev", type=float, default=100.0, help='percentage of all dev data used')
 
     parser.add_argument("--wandb", action='store_true')
     

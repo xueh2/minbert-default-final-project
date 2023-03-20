@@ -432,21 +432,21 @@ def train_multitask_reptile(args):
             if para_lr>1e-7 and step_para % args.StepLR_step_size == 0:
                 para_lr *= args.StepLR_gamma
                 state_para['param_groups'][0]['lr'] = para_lr
-                print(f"{Fore.YELLOW}--> {step_para}, para_lr is changed to {para_lr:.g}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}--> {step_para}, para_lr is changed to {para_lr:g}{Style.RESET_ALL}")
                                 
         if task_str == "sst":
             sst_lr = state_sst['param_groups'][0]['lr']
             if sst_lr>1e-7 and step_sst % args.StepLR_step_size == 0:
                 sst_lr *= args.StepLR_gamma
                 state_sst['param_groups'][0]['lr'] = sst_lr
-                print(f"{Fore.YELLOW}--> {step_sst}, sst_lr is changed to {sst_lr:.g}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}--> {step_sst}, sst_lr is changed to {sst_lr:g}{Style.RESET_ALL}")
                 
         if task_str == "sts":
             sts_lr = state_sts['param_groups'][0]['lr']
             if sts_lr>1e-7 and step_sts % args.StepLR_step_size == 0:
                 sts_lr *= args.StepLR_gamma
                 state_sts['param_groups'][0]['lr'] = sts_lr
-                print(f"{Fore.YELLOW}--> {step_sts}, sts_lr is changed to {sts_lr:.g}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}--> {step_sts}, sts_lr is changed to {sts_lr:g}{Style.RESET_ALL}")
                 
         # ---------------------------------------------------------------------
         # set the loop
@@ -527,7 +527,7 @@ def train_multitask_reptile(args):
                     wandb.run.summary["best_model_sst_dev_accuracy"] = sst_dev_accuracy
                     wandb.run.summary["best_model_sts_dev_corr"] = sts_dev_corr
                     
-            print(f"{Fore.YELLOW}--> dev acc is {dev_acc:.4f} for step {meta_iteration}.{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}--> dev acc is {Fore.RED}{dev_acc:.4f}{Fore.YELLOW} for step {meta_iteration}.{Style.RESET_ALL}")
             
             # -------------------------------------------
             
