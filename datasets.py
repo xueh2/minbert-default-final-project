@@ -326,7 +326,7 @@ def load_multitask_test_data():
 
 
 
-def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filename,split='train'):
+def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filename,percentage_to_use=100, split='train'):
     sentiment_data = []
     num_labels = {}
     if split == 'test':
@@ -335,6 +335,8 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                 sent = record['sentence'].lower().strip()
                 sent_id = record['id'].lower().strip()
                 sentiment_data.append((sent,sent_id))
+                
+        N = len(sentiment_data)
     else:
         with open(sentiment_filename, 'r', encoding="utf-8") as fp:
             for record in csv.DictReader(fp,delimiter = '\t'):
@@ -345,7 +347,11 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                     num_labels[label] = len(num_labels)
                 sentiment_data.append((sent, label,sent_id))
 
-    print(f"Loaded {len(sentiment_data)} {split} examples from {sentiment_filename}")
+        N = len(sentiment_data)
+        if percentage_to_use<100:
+            sentiment_data = sentiment_data[0:int(percentage_to_use/100.0 * N)]
+
+    print(f"Loaded {N} {split} examples from {sentiment_filename}, used {len(sentiment_data)} samples")
 
     paraphrase_data = []
     if split == 'test':
@@ -356,6 +362,7 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                                         preprocess_string(record['sentence2']),
                                         sent_id))
 
+        N = len(paraphrase_data)
     else:
         with open(paraphrase_filename, 'r', encoding="utf-8") as fp:
             for record in csv.DictReader(fp,delimiter = '\t'):
@@ -367,7 +374,11 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                 except:
                     pass
 
-    print(f"Loaded {len(paraphrase_data)} {split} examples from {paraphrase_filename}")
+        N = len(paraphrase_data)
+        if percentage_to_use<100:
+            paraphrase_data = paraphrase_data[0:int(percentage_to_use/100.0 * N)]
+            
+    print(f"Loaded {N} {split} examples from {paraphrase_filename}, used {len(paraphrase_data)} samples")
 
     similarity_data = []
     if split == 'test':
@@ -377,6 +388,8 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                 similarity_data.append((preprocess_string(record['sentence1']),
                                         preprocess_string(record['sentence2'])
                                         ,sent_id))
+                
+        N = len(similarity_data)
     else:
         with open(similarity_filename, 'r', encoding="utf-8") as fp:
             for record in csv.DictReader(fp,delimiter = '\t'):
@@ -385,6 +398,10 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
                                         preprocess_string(record['sentence2']),
                                         float(record['similarity']),sent_id))
 
-    print(f"Loaded {len(similarity_data)} {split} examples from {similarity_filename}")
+        N = len(similarity_data)
+        if percentage_to_use<100:
+            similarity_data = similarity_data[0:int(percentage_to_use/100.0 * N)]
+            
+    print(f"Loaded {N} {split} examples from {similarity_filename}, used {len(similarity_data)} samples")
 
     return sentiment_data, num_labels, paraphrase_data, similarity_data
