@@ -80,7 +80,8 @@
                 "--without_train_for_evaluation",
                 "--task_sample_prob_para", "0.0", 
                 "--task_sample_prob_sst", "1.0", 
-                "--task_sample_prob_sts", "0.0" 
+                "--task_sample_prob_sts", "0.0",
+                "--percentage_data_for_train", "10.0"
             ]
         }
     ]

@@ -417,15 +417,37 @@ def train_multitask_reptile(args):
            
         curr_lr = meta_scheduler.optimizer.param_groups[0]['lr']
            
-        if args.lr>1e-7 and meta_iteration>0 and meta_iteration % args.StepLR_step_size == 0:
-            args.lr *= args.StepLR_gamma
-            if task_str == "para":
-                state_para['param_groups'][0]['lr'] = args.lr
-            if task_str == "sst":
-                state_sst['param_groups'][0]['lr'] = args.lr
-            if task_str == "sts":
-                state_sts['param_groups'][0]['lr'] = args.lr
+        # if args.lr>1e-7 and meta_iteration>0 and meta_iteration % args.StepLR_step_size == 0:
+        #     args.lr *= args.StepLR_gamma
+        #     if task_str == "para":
+        #         state_para['param_groups'][0]['lr'] = args.lr
+        #     if task_str == "sst":
+        #         state_sst['param_groups'][0]['lr'] = args.lr
+        #     if task_str == "sts":
+        #         state_sts['param_groups'][0]['lr'] = args.lr
 
+
+        if task_str == "para":
+            para_lr = state_para['param_groups'][0]['lr']
+            if para_lr>1e-7 and step_para % args.StepLR_step_size == 0:
+                para_lr *= args.StepLR_gamma
+                state_para['param_groups'][0]['lr'] = para_lr
+                print(f"{Fore.YELLOW}--> {step_para}, para_lr is changed to {para_lr:.g}{Style.RESET_ALL}")
+                                
+        if task_str == "sst":
+            sst_lr = state_sst['param_groups'][0]['lr']
+            if sst_lr>1e-7 and step_sst % args.StepLR_step_size == 0:
+                sst_lr *= args.StepLR_gamma
+                state_sst['param_groups'][0]['lr'] = sst_lr
+                print(f"{Fore.YELLOW}--> {step_sst}, sst_lr is changed to {sst_lr:.g}{Style.RESET_ALL}")
+                
+        if task_str == "sts":
+            sts_lr = state_sts['param_groups'][0]['lr']
+            if sts_lr>1e-7 and step_sts % args.StepLR_step_size == 0:
+                sts_lr *= args.StepLR_gamma
+                state_sts['param_groups'][0]['lr'] = sts_lr
+                print(f"{Fore.YELLOW}--> {step_sts}, sts_lr is changed to {sts_lr:.g}{Style.RESET_ALL}")
+                
         # ---------------------------------------------------------------------
         # set the loop
         loop.update(1)
